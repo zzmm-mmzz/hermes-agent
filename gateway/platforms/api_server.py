@@ -2622,6 +2622,297 @@ class APIServerAdapter(BasePlatformAdapter):
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
 
+    async def _handle_get_security_mode(self, request: "web.Request") -> "web.Response":
+        """GET /api/security/mode — get the current security mode and settings."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        try:
+            from hermes_cli.config import load_config_readonly
+            cfg = load_config_readonly()
+            sec = cfg.get("security", {})
+            return web.json_response({
+                "mode": sec.get("mode", "protection"),
+                "settings": {
+                    "allow_private_urls": sec.get("allow_private_urls", False),
+                    "redact_secrets": sec.get("redact_secrets", True),
+                    "tirith_enabled": sec.get("tirith_enabled", True),
+                    "tirith_path": sec.get("tirith_path", "tirith"),
+                    "tirith_timeout": sec.get("tirith_timeout", 5),
+                    "tirith_fail_open": sec.get("tirith_fail_open", True),
+                    "approval_required": sec.get("approval_required", True),
+                },
+            })
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def _handle_set_security_mode(self, request: "web.Request") -> "web.Response":
+        """POST /api/security/mode — set the security mode.
+
+        Body:
+            {"mode": "trust" | "protection" | "strict" | "off" | "custom"}
+        Optional (for custom mode):
+            {"mode": "custom", "settings": {"tirith_enabled": false, ...}}
+
+        Valid modes:
+            trust      — Minimal restrictions, tirith warnings only
+            protection — Balanced protection (default): tirith enabled, approval required
+            strict     — Maximum security: tirith blocks, strict approval
+            off        — Disabled: no security measures
+            custom     — User-defined per-field settings
+        """
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        try:
+            body = await request.json()
+            mode = (body.get("mode") or "").strip().lower()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON body"}, status=400)
+
+        VALID_MODES = {"trust", "protection", "strict", "off", "custom"}
+        if mode not in VALID_MODES:
+            return web.json_response({
+                "error": f"Invalid mode '{mode}'. Must be one of: {', '.join(sorted(VALID_MODES))}",
+            }, status=400)
+
+        try:
+            from hermes_cli.config import load_config, save_config
+            cfg = load_config()
+            if "security" not in cfg:
+                cfg["security"] = {}
+
+            # Predefined mode profiles
+            MODE_PROFILES = {
+                "trust": {
+                    "allow_private_urls": True,
+                    "redact_secrets": False,
+                    "tirith_enabled": False,
+                    "tirith_fail_open": True,
+                    "approval_required": False,
+                },
+                "protection": {
+                    "allow_private_urls": False,
+                    "redact_secrets": True,
+                    "tirith_enabled": True,
+                    "tirith_fail_open": True,
+                    "approval_required": True,
+                },
+                "strict": {
+                    "allow_private_urls": False,
+                    "redact_secrets": True,
+                    "tirith_enabled": True,
+                    "tirith_fail_open": False,
+                    "approval_required": True,
+                },
+                "off": {
+                    "allow_private_urls": True,
+                    "redact_secrets": False,
+                    "tirith_enabled": False,
+                    "tirith_fail_open": True,
+                    "approval_required": False,
+                },
+            }
+
+            if mode == "custom":
+                # For custom mode, apply user-provided settings on top of defaults
+                custom_settings = body.get("settings", {})
+                cfg["security"]["mode"] = "custom"
+                for key in ("allow_private_urls", "redact_secrets", "tirith_enabled",
+                            "tirith_fail_open", "approval_required"):
+                    if key in custom_settings:
+                        cfg["security"][key] = bool(custom_settings[key])
+            else:
+                # Apply the predefined profile
+                profile = MODE_PROFILES[mode]
+                cfg["security"].update(profile)
+                cfg["security"]["mode"] = mode
+
+            save_config(cfg)
+            return web.json_response({
+                "message": f"Security mode set to '{mode}'",
+                "mode": mode,
+                "settings": {
+                    k: cfg["security"].get(k)
+                    for k in ("allow_private_urls", "redact_secrets", "tirith_enabled",
+                              "tirith_fail_open", "approval_required")
+                },
+            })
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def _handle_get_sandbox(self, request: "web.Request") -> "web.Response":
+        """GET /api/sandbox — get the current sandbox environment status."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        try:
+            from hermes_cli.config import load_config_readonly
+            cfg = load_config_readonly()
+            term = cfg.get("terminal", {})
+            backend = term.get("backend", "local")
+            sandbox_backends = {"docker", "vercel_sandbox", "ssh", "singularity", "modal", "daytona"}
+            return web.json_response({
+                "sandbox_enabled": backend not in ("local",),
+                "backend": backend,
+                "available_backends": sorted(sandbox_backends | {"local"}),
+                "settings": {
+                    "backend": backend,
+                    "docker_image": term.get("docker_image", ""),
+                    "vercel_runtime": term.get("vercel_runtime", ""),
+                    "container_cpu": term.get("container_cpu", 1),
+                    "container_memory": term.get("container_memory", 5120),
+                    "container_disk": term.get("container_disk", 51200),
+                    "container_persistent": term.get("container_persistent", True),
+                },
+            })
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def _handle_set_sandbox(self, request: "web.Request") -> "web.Response":
+        """POST /api/sandbox — enable or disable the sandbox environment.
+
+        Body:
+            {"sandbox_enabled": true}   — switch to recommended sandbox backend (docker if available, else vercel_sandbox)
+            {"sandbox_enabled": false}  — switch to local backend (disable sandbox)
+            {"backend": "docker"}       — set a specific terminal backend directly
+
+        Supported backends:
+            local          — Run commands directly on the host (no sandbox)
+            docker         — Run in Docker containers
+            vercel_sandbox — Run in Vercel Sandbox (node24 runtime)
+            ssh            — Run on a remote SSH host
+            singularity    — Run in Singularity containers
+            modal          — Run on Modal serverless
+            daytona        — Run on Daytona workspaces
+        """
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON body"}, status=400)
+
+        try:
+            from hermes_cli.config import load_config, save_config
+            cfg = load_config()
+            if "terminal" not in cfg:
+                cfg["terminal"] = {}
+            term = cfg["terminal"]
+
+            sandbox_backends = {"docker", "vercel_sandbox", "ssh", "singularity", "modal", "daytona"}
+            all_backends = sandbox_backends | {"local"}
+
+            # Check if a specific backend was requested
+            backend_raw = body.get("backend")
+            if backend_raw is not None:
+                backend = str(backend_raw).strip().lower()
+                if backend not in all_backends:
+                    return web.json_response({
+                        "error": f"Invalid backend '{backend}'. Must be one of: {', '.join(sorted(all_backends))}",
+                    }, status=400)
+                term["backend"] = backend
+            else:
+                # Use sandbox_enabled boolean toggle
+                sandbox_enabled = body.get("sandbox_enabled")
+                if sandbox_enabled is None:
+                    return web.json_response({
+                        "error": "Provide either 'sandbox_enabled' (bool) or 'backend' (string)",
+                    }, status=400)
+
+                desired = bool(sandbox_enabled)
+                current = term.get("backend", "local")
+                is_sandboxed = current not in ("local",)
+
+                if desired == is_sandboxed:
+                    # Already in the desired state — no change needed
+                    pass
+                elif desired:
+                    # Switch from local to a sandbox backend
+                    # Prefer docker, fall back to vercel_sandbox (most broadly available)
+                    term["backend"] = "vercel_sandbox"
+                else:
+                    # Switch from sandbox to local
+                    # Remember the previous backend for reference
+                    previous_backend = term.get("backend", "local")
+                    term["backend"] = "local"
+                    # Store the previous backend so user can restore later if needed
+                    term["previous_backend"] = previous_backend
+
+            save_config(cfg)
+            new_backend = term.get("backend", "local")
+            return web.json_response({
+                "message": f"Sandbox backend set to '{new_backend}'",
+                "sandbox_enabled": new_backend not in ("local",),
+                "backend": new_backend,
+            })
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def _handle_get_workdir(self, request: "web.Request") -> "web.Response":
+        """GET /api/workdir — get the current Hermes Agent working directory."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        try:
+            cwd = os.getcwd()
+            # Also read the project_root from module-level context
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+            return web.json_response({
+                "workdir": cwd,
+                "project_root": project_root,
+            })
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def _handle_set_workdir(self, request: "web.Request") -> "web.Response":
+        """POST /api/workdir — set the Hermes Agent working directory.
+
+        Body:
+            {"workdir": "/path/to/directory"}
+
+        The path must exist on the filesystem. The change is applied to the
+        running process (os.chdir) and persists for the lifetime of the
+        gateway process.
+        """
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON body"}, status=400)
+
+        workdir = body.get("workdir")
+        if not workdir or not isinstance(workdir, str):
+            return web.json_response({
+                "error": "Provide 'workdir' (string, non-empty path)",
+            }, status=400)
+
+        workdir = workdir.strip()
+        # Normalize: handle Windows backslashes, relative paths, ~ expansion
+        workdir = os.path.expanduser(workdir)
+        workdir = os.path.abspath(workdir)
+
+        if not os.path.isdir(workdir):
+            return web.json_response({
+                "error": f"Directory does not exist: {workdir}",
+            }, status=400)
+
+        try:
+            os.chdir(workdir)
+            return web.json_response({
+                "message": f"Working directory changed to: {workdir}",
+                "workdir": os.getcwd(),
+            })
+        except PermissionError:
+            return web.json_response({
+                "error": f"Permission denied: {workdir}",
+            }, status=403)
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
     # ------------------------------------------------------------------
     # Output extraction helper
     # ------------------------------------------------------------------
@@ -3415,6 +3706,15 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_post("/api/jobs/{job_id}/pause", self._handle_pause_job)
             self._app.router.add_post("/api/jobs/{job_id}/resume", self._handle_resume_job)
             self._app.router.add_post("/api/jobs/{job_id}/run", self._handle_run_job)
+            # Security mode management API
+            self._app.router.add_get("/api/security/mode", self._handle_get_security_mode)
+            self._app.router.add_post("/api/security/mode", self._handle_set_security_mode)
+            # Sandbox environment management API
+            self._app.router.add_get("/api/sandbox", self._handle_get_sandbox)
+            self._app.router.add_post("/api/sandbox", self._handle_set_sandbox)
+            # Working directory management API
+            self._app.router.add_get("/api/workdir", self._handle_get_workdir)
+            self._app.router.add_post("/api/workdir", self._handle_set_workdir)
             # Structured event streaming
             self._app.router.add_post("/v1/runs", self._handle_runs)
             self._app.router.add_get("/v1/runs/{run_id}", self._handle_get_run)

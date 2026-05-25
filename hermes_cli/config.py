@@ -1471,6 +1471,13 @@ DEFAULT_CONFIG = {
 
     # Pre-exec security scanning via tirith
     "security": {
+        # Security mode preset — controls the overall security posture.
+        #   "protection" — Balanced protection (default): tirith enabled, dangerous commands require approval
+        #   "trust"      — Trust mode: minimal restrictions, tirith warnings only
+        #   "strict"     — Strict mode: maximum security, tirith blocks, strict approval
+        #   "off"        — Disabled: no security measures at all
+        #   "custom"     — Custom: user-defined per-field settings (mode effects are ignored, raw config values used)
+        "mode": "protection",
         "allow_private_urls": False,  # Allow requests to private/internal IPs (for OpenWrt, proxies, VPNs)
         "redact_secrets": True,
         "tirith_enabled": True,
@@ -4430,8 +4437,14 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
         return expanded
 
 
-_SECURITY_COMMENT = """
+_SECURITY_COMMENT = """\
 # ── Security ──────────────────────────────────────────────────────────
+# Security mode preset: mode: trust | protection | strict | off | custom
+#   trust      — Minimal restrictions, tirith warnings only
+#   protection — Balanced protection (default): tirith enabled, approval required
+#   strict     — Maximum security: tirith blocks, strict approval
+#   off        — Disabled: no security measures at all
+#   custom     — User-defined per-field settings (mode effects are ignored)
 # Secret redaction is ON by default — strings that look like API keys,
 # tokens, and passwords are masked in tool output, logs, and chat
 # responses before the model or user ever sees them. Set redact_secrets
@@ -4441,6 +4454,7 @@ _SECURITY_COMMENT = """
 # (TIRITH_ENABLED, TIRITH_BIN, TIRITH_TIMEOUT, TIRITH_FAIL_OPEN).
 #
 # security:
+#   mode: protection
 #   redact_secrets: true
 #   tirith_enabled: true
 #   tirith_path: "tirith"
