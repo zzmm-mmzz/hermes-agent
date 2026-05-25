@@ -2851,15 +2851,29 @@ class APIServerAdapter(BasePlatformAdapter):
             return web.json_response({"error": str(e)}, status=500)
 
     async def _handle_get_workdir(self, request: "web.Request") -> "web.Response":
-        """GET /api/workdir — get the current Hermes Agent working directory."""
+        """GET /api/workdir — get the current path whitelist and working directory.
+
+        Returns:
+            allowed_paths — list of whitelisted directories
+            workdir      — current actual working directory (os.getcwd())
+            project_root — project root directory
+        """
         auth_err = self._check_auth(request)
         if auth_err:
             return auth_err
         try:
+            from hermes_cli.config import load_config
+            config = load_config()
+            allowed_paths = config.get("security", {}).get("allowed_paths", ["~"])
+            # Expand ~ for display
+            expanded = []
+            for p in allowed_paths:
+                expanded.append(os.path.expanduser(p) if p else p)
             cwd = os.getcwd()
-            # Also read the project_root from module-level context
             project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
             return web.json_response({
+                "allowed_paths": allowed_paths,
+                "expanded_paths": expanded,
                 "workdir": cwd,
                 "project_root": project_root,
             })
@@ -2867,14 +2881,15 @@ class APIServerAdapter(BasePlatformAdapter):
             return web.json_response({"error": str(e)}, status=500)
 
     async def _handle_set_workdir(self, request: "web.Request") -> "web.Response":
-        """POST /api/workdir — set the Hermes Agent working directory.
+        """POST /api/workdir — set the path whitelist.
 
-        Body:
-            {"workdir": "/path/to/directory"}
+        Body supports two formats:
+          A) {"allowed_paths": ["G:\\projects", "~"]}  — set a list of paths
+          B) {"allowed_paths": []}                      — clear whitelist (no restriction)
 
-        The path must exist on the filesystem. The change is applied to the
-        running process (os.chdir) and persists for the lifetime of the
-        gateway process.
+        Each path is expanded (~ → user home), normalized to absolute,
+        and validated for existence. Non-existent paths are returned in an
+        "errors" list but valid paths are still saved.
         """
         auth_err = self._check_auth(request)
         if auth_err:
@@ -2884,32 +2899,42 @@ class APIServerAdapter(BasePlatformAdapter):
         except Exception:
             return web.json_response({"error": "Invalid JSON body"}, status=400)
 
-        workdir = body.get("workdir")
-        if not workdir or not isinstance(workdir, str):
+        paths = body.get("allowed_paths")
+        if paths is None or not isinstance(paths, list):
             return web.json_response({
-                "error": "Provide 'workdir' (string, non-empty path)",
+                "error": "Provide 'allowed_paths' (array of path strings)",
             }, status=400)
 
-        workdir = workdir.strip()
-        # Normalize: handle Windows backslashes, relative paths, ~ expansion
-        workdir = os.path.expanduser(workdir)
-        workdir = os.path.abspath(workdir)
-
-        if not os.path.isdir(workdir):
-            return web.json_response({
-                "error": f"Directory does not exist: {workdir}",
-            }, status=400)
+        valid = []
+        errors = []
+        for p in paths:
+            if not isinstance(p, str) or not p.strip():
+                continue
+            p = p.strip()
+            p = os.path.expanduser(p)
+            p = os.path.abspath(p)
+            if os.path.isdir(p):
+                valid.append(p)
+            else:
+                errors.append(f"Directory does not exist: {p}")
 
         try:
-            os.chdir(workdir)
-            return web.json_response({
-                "message": f"Working directory changed to: {workdir}",
-                "workdir": os.getcwd(),
-            })
+            from hermes_cli.config import load_config, save_config
+            config = load_config()
+            if "security" not in config:
+                config["security"] = {}
+            config["security"]["allowed_paths"] = valid if valid else paths
+            save_config(config)
+            resp = {
+                "message": "Path whitelist updated",
+                "allowed_paths": config["security"]["allowed_paths"],
+            }
+            if errors:
+                resp["errors"] = errors
+            status = 200 if not errors else 207
+            return web.json_response(resp, status=status)
         except PermissionError:
-            return web.json_response({
-                "error": f"Permission denied: {workdir}",
-            }, status=403)
+            return web.json_response({"error": "Permission denied writing config"}, status=403)
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
 

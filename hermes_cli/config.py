@@ -1504,6 +1504,10 @@ DEFAULT_CONFIG = {
         # for restricted networks, audited environments, or air-gapped
         # systems where any runtime install is unacceptable.
         "allow_lazy_installs": True,
+        # Allowed directory paths that Hermes can read/write.
+        # An empty list ([]) means no restriction (any path is allowed).
+        # Relative paths are resolved from user home (~).
+        "allowed_paths": ["~"],
     },
 
     "cron": {
@@ -4452,6 +4456,10 @@ _SECURITY_COMMENT = """\
 # tirith pre-exec scanning is enabled by default when the tirith binary
 # is available. Configure via security.tirith_* keys or env vars
 # (TIRITH_ENABLED, TIRITH_BIN, TIRITH_TIMEOUT, TIRITH_FAIL_OPEN).
+# allowed_paths restricts which directories Hermes can access.
+#   []       — no restriction (any path allowed)
+#   ["~"]    — only user home directory (default)
+#   ["~/a", "/b"] — specific directories only
 #
 # security:
 #   mode: protection
@@ -4460,6 +4468,7 @@ _SECURITY_COMMENT = """\
 #   tirith_path: "tirith"
 #   tirith_timeout: 5
 #   tirith_fail_open: true
+#   allowed_paths: ["~"]
 """
 
 _FALLBACK_COMMENT = """

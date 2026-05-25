@@ -1,146 +1,106 @@
-# 工作目录管理 API
+# 路径白名单管理 API
 
 ## 概述
 
-工作目录管理 API 用于获取和设置 Hermes Agent 的运行时工作目录（进程级 `os.getcwd()`）。
+管理 Hermes Agent 的安全路径白名单（allowed_paths）。白名单定义了 Hermes 可以读写哪些目录，是安全系统的一部分，存储在 `config.yaml` 的 `security.allowed_paths` 字段中。
 
-## 端点清单
+## GET /api/workdir
 
-| 方法 | 路径 | 功能 |
-|------|------|------|
-| GET | `/api/workdir` | 获取当前工作目录 |
-| POST | `/api/workdir` | 设置当前工作目录 |
+获取当前的路径白名单和工作目录。
 
-## 认证
-
-所有请求需要通过 API 密钥认证，通过 `Authorization: Bearer <token>` 或 `X-API-Key` 请求头发送。
-
-## 获取工作目录
-
-```
-GET /api/workdir
-```
-
-### 请求示例
+### 请求
 
 ```bash
-curl http://127.0.0.1:8642/api/workdir \
-  -H "Authorization: Bearer your-api-key"
+curl http://127.0.0.1:8642/api/workdir
 ```
 
 ### 响应示例
 
 ```json
 {
+  "allowed_paths": ["~"],
+  "expanded_paths": ["C:\\Users\\27430"],
   "workdir": "G:\\hermes agent\\hermes-agent",
   "project_root": "G:\\hermes agent\\hermes-agent"
 }
 ```
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `workdir` | string | 进程当前工作目录（`os.getcwd()`） |
-| `project_root` | string | Hermes Agent 项目根目录（固定值，用于参考对比） |
+| 字段 | 说明 |
+|------|------|
+| `allowed_paths` | 配置中保存的原始白名单路径列表（可能含 `~`） |
+| `expanded_paths` | `~` 展开后的实际绝对路径列表 |
+| `workdir` | 当前进程的实际工作目录（`os.getcwd()`） |
+| `project_root` | 项目根目录 |
 
-## 设置工作目录
+## POST /api/workdir
 
-```
-POST /api/workdir
-Content-Type: application/json
+设置路径白名单。
 
-{
-  "workdir": "/path/to/directory"
-}
-```
-
-### 请求体参数
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `workdir` | string | 是 | 目标工作目录路径。支持绝对路径、相对路径、`~` 展开 |
-
-### 路径处理规则
-
-- 支持 `~` 展开为用户家目录
-- 相对路径基于当前工作目录解析
-- Windows 反斜杠路径自动标准化
-- 路径必须 **已存在** 于文件系统上
-- 通过 `os.chdir()` 实时生效，仅影响当前进程
-
-### 请求示例
-
-```bash
-# 设置为项目目录
-curl -X POST http://127.0.0.1:8642/api/workdir \
-  -H "Authorization: Bearer your-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"workdir": "G:\\hermes agent\\hermes-agent"}'
-
-# 设置到家目录下的某个项目
-curl -X POST http://127.0.0.1:8642/api/workdir \
-  -H "Authorization: Bearer your-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"workdir": "~/projects/my-project"}'
-
-# 使用正斜杠路径（同样支持）
-curl -X POST http://127.0.0.1:8642/api/workdir \
-  -H "Authorization: Bearer your-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"workdir": "C:/Users/27430/projects/my-project"}'
-```
-
-### 成功响应
+### 请求体格式
 
 ```json
 {
-  "message": "Working directory changed to: G:\\hermes agent\\hermes-agent",
-  "workdir": "G:\\hermes agent\\hermes-agent"
+  "allowed_paths": ["G:\\hermes agent\\hermes-agent", "~"]
 }
 ```
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `message` | string | 操作描述 |
-| `workdir` | string | 设置后的当前工作目录 |
+支持多路径，`~` 会自动展开为用户家目录。
 
-### 错误响应
-
-**400 — 参数缺失或路径不存在**
+传空数组表示不限制任何路径：
 
 ```json
 {
-  "error": "Provide 'workdir' (string, non-empty path)"
+  "allowed_paths": []
 }
 ```
+
+### 响应示例（成功）
 
 ```json
 {
-  "error": "Directory does not exist: G:\\nonexistent\\path"
+  "message": "Path whitelist updated",
+  "allowed_paths": [
+    "G:\\hermes agent\\hermes-agent",
+    "C:\\Users\\27430"
+  ]
 }
 ```
+
+### 响应示例（部分路径不存在）
 
 ```json
 {
-  "error": "Invalid JSON body"
+  "message": "Path whitelist updated",
+  "allowed_paths": [
+    "G:\\hermes agent\\hermes-agent"
+  ],
+  "errors": [
+    "Directory does not exist: C:\\non_existent_dir"
+  ]
 }
 ```
 
-**403 — 权限不足**
+不存在的路径会被跳过并列出在 `errors` 数组中，状态码返回 207。
 
-```json
-{
-  "error": "Permission denied: C:\\Windows\\System32"
-}
-```
+## 五种模式的默认白名单
 
-## 注意事项
+| 模式 | 默认白名单 |
+|------|-----------|
+| `trust` | `["~"]` — 用户家目录 |
+| `protection` | `["~"]` — 用户家目录 |
+| `strict` | `["~"]` — 用户家目录 |
+| `off` | `["~"]` — 用户家目录 |
+| `custom` | `["~"]` — 用户家目录 |
 
-1. **进程级生效**：`os.chdir()` 改变的是整个 Python 进程的工作目录，后续所有相对路径操作都基于该目录。
-2. **不持久化**：此 API 不修改 `config.yaml`，重启 Hermes Agent 后工作目录恢复为启动目录。
-3. **影响范围**：设置的工作目录会影响该进程中运行的 cron 任务、子进程等工作目录相关的行为。
-4. **项目根目录不变**：`project_root` 在 GET 响应中作为参考返回，它是 Hermes Agent 代码目录，不受 SET 操作影响。
+白名单与安全模式是独立的设置，仅在 `protection` 和 `strict` 模式下生效。
 
-## 与其他 API 的关系
+## 错误码
 
-- 配合 `/api/sandbox` 使用：设置工作目录后再开启沙箱，可以控制沙箱环境的默认工作路径
-- 配合 `/api/security/mode` 使用：安全模式不依赖工作目录，两者独立
+| 状态码 | 说明 |
+|--------|------|
+| 200 | 成功 |
+| 207 | 部分路径不存在（白名单已保存） |
+| 400 | 请求体格式错误（需要 `allowed_paths` 数组） |
+| 401 | 缺少认证头 |
+| 403 | 权限不足 |
+| 500 | 服务器内部错误 |
