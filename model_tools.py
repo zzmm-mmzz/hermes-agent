@@ -31,6 +31,7 @@ from typing import Dict, Any, List, Optional, Tuple
 
 from tools.registry import discover_builtin_tools, registry
 from toolsets import resolve_toolset, validate_toolset
+from hermes_cli.config import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -737,6 +738,85 @@ def _coerce_boolean(value: str):
         return False
     return value
 
+def _check_path_whitelist(tool_name: str, tool_args: dict) -> tuple[bool, str]:
+    """检查工具调用的路径参数是否在安全白名单内。
+
+    Args:
+        tool_name: 工具名称
+        tool_args: 工具参数字典
+
+    Returns:
+        (True, "") 表示通过；(False, "错误信息") 表示被拒绝
+    """
+    try:
+        config = load_config()
+        security = config.get("security", {})
+        mode = security.get("mode", "protection")
+        allowed_paths = security.get("allowed_paths", [])
+
+        # trust 和 off 模式不检查
+        if mode in ("trust", "off"):
+            return True, ""
+
+        # 白名单为空不限制
+        if not allowed_paths:
+            return True, ""
+
+        # 各个工具的文件路径参数名映射
+        TOOL_PATH_PARAMS = {
+            "read_file": ["path"],
+            "write_file": ["path"],
+            "patch": ["path"],
+            "delete_file": ["path"],
+            "search_files": ["path"],
+            "vision_analyze": ["image_url"],
+        }
+
+        path_params = TOOL_PATH_PARAMS.get(tool_name, [])
+        if not path_params:
+            return True, ""  # 非文件工具不检查
+
+        # 展开白名单路径
+        expanded_allowed = []
+        for p in allowed_paths:
+            expanded = os.path.normpath(os.path.abspath(os.path.expanduser(p)))
+            expanded_allowed.append(expanded)
+
+        for param in path_params:
+            if param not in tool_args:
+                continue
+            file_path = str(tool_args[param])
+
+            # search_files 默认 "." 时跳过
+            if tool_name == "search_files" and file_path in (".", ""):
+                continue
+            # vision_analyze 的 HTTP/data URL 跳过
+            if tool_name == "vision_analyze" and file_path.startswith(("http://", "https://", "data:")):
+                continue
+
+            # 展开并规范化要访问的路径
+            expanded_path = os.path.normpath(os.path.abspath(os.path.expanduser(file_path)))
+
+            # 检查是否在任一白名单路径下
+            is_allowed = False
+            for allowed in expanded_allowed:
+                if expanded_path == allowed or expanded_path.startswith(allowed + os.sep):
+                    is_allowed = True
+                    break
+
+            if not is_allowed:
+                return False, (
+                    f"访问被拒绝：路径 '{file_path}' 不在安全白名单内。\n"
+                    f"允许的路径: {allowed_paths}\n"
+                    f"如需修改白名单，请联系管理员或使用 /api/workdir 接口。"
+                )
+
+        return True, ""
+    except Exception as e:
+        # 如果配置文件读取失败，安全起见拒绝访问
+        return False, f"安全白名单校验失败: {str(e)}"
+
+
 
 def handle_function_call(
     function_name: str,
@@ -820,6 +900,11 @@ def handle_function_call(
                 notify_other_tool_call(task_id or "default")
             except Exception:
                 pass  # file_tools may not be loaded yet
+
+        # ===== 路径白名单校验 =====
+        _allow, _reason = _check_path_whitelist(function_name, function_args)
+        if not _allow:
+            return json.dumps({"error": _reason}, ensure_ascii=False)
 
         # Measure tool dispatch latency so post_tool_call and
         # transform_tool_result hooks can observe per-tool duration.
