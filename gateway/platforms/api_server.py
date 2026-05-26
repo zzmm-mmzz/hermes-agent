@@ -2682,6 +2682,8 @@ class APIServerAdapter(BasePlatformAdapter):
             if "security" not in cfg:
                 cfg["security"] = {}
 
+            previous_mode = cfg["security"].get("mode", "unknown")
+
             # Predefined mode profiles
             MODE_PROFILES = {
                 "trust": {
@@ -2729,6 +2731,10 @@ class APIServerAdapter(BasePlatformAdapter):
                 cfg["security"]["mode"] = mode
 
             save_config(cfg)
+            await self._log_audit_event("security_mode_change", {
+                "mode": mode,
+                "previous_mode": previous_mode,
+            })
             return web.json_response({
                 "message": f"Security mode set to '{mode}'",
                 "mode": mode,
@@ -2842,6 +2848,10 @@ class APIServerAdapter(BasePlatformAdapter):
 
             save_config(cfg)
             new_backend = term.get("backend", "local")
+            await self._log_audit_event("sandbox_change", {
+                "backend": new_backend,
+                "sandbox_enabled": new_backend not in ("local",),
+            })
             return web.json_response({
                 "message": f"Sandbox backend set to '{new_backend}'",
                 "sandbox_enabled": new_backend not in ("local",),
@@ -2925,6 +2935,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 config["security"] = {}
             config["security"]["allowed_paths"] = valid if valid else paths
             save_config(config)
+            await self._log_audit_event("workdir_change", {
+                "allowed_paths": config["security"]["allowed_paths"],
+            })
             resp = {
                 "message": "Path whitelist updated",
                 "allowed_paths": config["security"]["allowed_paths"],
@@ -2936,6 +2949,160 @@ class APIServerAdapter(BasePlatformAdapter):
         except PermissionError:
             return web.json_response({"error": "Permission denied writing config"}, status=403)
         except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    # ------------------------------------------------------------------
+    # Audit log management
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _get_audit_log_path() -> str:
+        """Get the audit log file path."""
+        config_dir = os.environ.get(
+            "HERMES_CONFIG_DIR",
+            os.path.join(os.path.expanduser("~"), ".hermes"),
+        )
+        return os.path.join(config_dir, "audit_log.json")
+
+    @staticmethod
+    def _read_audit_log() -> list:
+        """Read all audit log entries from the JSON lines file."""
+        path = APIServerAdapter._get_audit_log_path()
+        if not os.path.exists(path):
+            return []
+        entries = []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            entries.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
+        except (OSError, IOError):
+            pass
+        return entries
+
+    @staticmethod
+    def _write_audit_log(entries: list) -> None:
+        """Write audit log entries as JSON lines, pruning old entries."""
+        path = APIServerAdapter._get_audit_log_path()
+        from hermes_cli.config import load_config_readonly
+        cfg = load_config_readonly()
+        audit_cfg = cfg.get("audit_log", {})
+        max_entries = audit_cfg.get("max_entries", 1000)
+        retention_days = audit_cfg.get("retention_days", 30)
+
+        # Prune by retention days
+        if retention_days > 0:
+            cutoff = time.time() - retention_days * 86400
+            entries = [e for e in entries if e.get("timestamp", 0) >= cutoff]
+
+        # Prune by max entries (keep most recent)
+        if max_entries > 0 and len(entries) > max_entries:
+            entries = entries[-max_entries:]
+
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                for entry in entries:
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except (OSError, IOError):
+            pass
+
+    async def _log_audit_event(self, event_type: str, detail: dict) -> None:
+        """Record an audit event. Skips if audit_log is disabled."""
+        from hermes_cli.config import load_config_readonly
+        cfg = load_config_readonly()
+        audit_cfg = cfg.get("audit_log", {})
+        if not audit_cfg.get("enabled", True):
+            return
+
+        entry = {
+            "timestamp": time.time(),
+            "event_type": event_type,
+            "detail": detail,
+        }
+        entries = self._read_audit_log()
+        entries.append(entry)
+        self._write_audit_log(entries)
+
+    async def _handle_get_audit_log(self, request: "web.Request") -> "web.Response":
+        """GET /api/audit/log — query audit log entries.
+
+        Query params:
+            type      — Filter by event type (optional)
+            since     — ISO timestamp, include entries after this time (optional)
+            until     — ISO timestamp, include entries before this time (optional)
+            offset    — Pagination offset (default: 0)
+            limit     — Max entries to return (default: 20, max: 200)
+        """
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+
+        entries = self._read_audit_log()
+
+        # Filter by event type
+        event_type = request.query.get("type", "").strip()
+        if event_type:
+            entries = [e for e in entries if e.get("event_type") == event_type]
+
+        # Filter by time range
+        since_str = request.query.get("since", "").strip()
+        until_str = request.query.get("until", "").strip()
+        if since_str:
+            try:
+                from datetime import datetime
+                since_ts = datetime.fromisoformat(since_str).timestamp()
+                entries = [e for e in entries if e.get("timestamp", 0) >= since_ts]
+            except (ValueError, TypeError):
+                pass
+        if until_str:
+            try:
+                from datetime import datetime
+                until_ts = datetime.fromisoformat(until_str).timestamp()
+                entries = [e for e in entries if e.get("timestamp", 0) <= until_ts]
+            except (ValueError, TypeError):
+                pass
+
+        # Sort newest first
+        entries.sort(key=lambda e: e.get("timestamp", 0), reverse=True)
+
+        # Paginate
+        try:
+            offset = int(request.query.get("offset", "0"))
+        except (ValueError, TypeError):
+            offset = 0
+        try:
+            limit = int(request.query.get("limit", "20"))
+        except (ValueError, TypeError):
+            limit = 20
+        limit = min(limit, 200)
+
+        total = len(entries)
+        page = entries[offset:offset + limit]
+
+        return web.json_response({
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "entries": page,
+        })
+
+    async def _handle_clear_audit_log(self, request: "web.Request") -> "web.Response":
+        """DELETE /api/audit/log — clear all audit log entries."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+
+        path = self._get_audit_log_path()
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+            return web.json_response({"message": "Audit log cleared"})
+        except OSError as e:
             return web.json_response({"error": str(e)}, status=500)
 
     # ------------------------------------------------------------------
@@ -3740,6 +3907,9 @@ class APIServerAdapter(BasePlatformAdapter):
             # Working directory management API
             self._app.router.add_get("/api/workdir", self._handle_get_workdir)
             self._app.router.add_post("/api/workdir", self._handle_set_workdir)
+            # Audit log management API
+            self._app.router.add_get("/api/audit/log", self._handle_get_audit_log)
+            self._app.router.add_delete("/api/audit/log", self._handle_clear_audit_log)
             # Structured event streaming
             self._app.router.add_post("/v1/runs", self._handle_runs)
             self._app.router.add_get("/v1/runs/{run_id}", self._handle_get_run)

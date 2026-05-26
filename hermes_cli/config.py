@@ -1510,6 +1510,20 @@ DEFAULT_CONFIG = {
         "allowed_paths": ["~"],
     },
 
+    # Audit log configuration.
+    # Records security-relevant events (mode changes, sandbox toggles,
+    # path whitelist updates, blocked access attempts) for review.
+    "audit_log": {
+        # Whether to record audit events. Set false to disable entirely.
+        "enabled": True,
+        # Maximum number of log entries to retain. Oldest entries are
+        # pruned first when the limit is exceeded.
+        "max_entries": 1000,
+        # Number of days to retain log entries. Entries older than this
+        # are pruned on each write. 0 = unlimited.
+        "retention_days": 30,
+    },
+
     "cron": {
         # Wrap delivered cron responses with a header (task name) and footer
         # ("The agent cannot see this message").  Set to false for clean output.
