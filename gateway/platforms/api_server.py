@@ -2731,10 +2731,12 @@ class APIServerAdapter(BasePlatformAdapter):
                 cfg["security"]["mode"] = mode
 
             save_config(cfg)
-            await self._log_audit_event("security_mode_change", {
-                "mode": mode,
-                "previous_mode": previous_mode,
-            })
+            await self._log_audit_event(
+                "security_mode_change",
+                before_value=previous_mode,
+                after_value=mode,
+                detail={"mode": mode, "previous_mode": previous_mode},
+            )
             return web.json_response({
                 "message": f"Security mode set to '{mode}'",
                 "mode": mode,
@@ -2806,6 +2808,7 @@ class APIServerAdapter(BasePlatformAdapter):
             if "terminal" not in cfg:
                 cfg["terminal"] = {}
             term = cfg["terminal"]
+            previous_backend = term.get("backend", "local")
 
             sandbox_backends = {"docker", "vercel_sandbox", "ssh", "singularity", "modal", "daytona"}
             all_backends = sandbox_backends | {"local"}
@@ -2848,10 +2851,12 @@ class APIServerAdapter(BasePlatformAdapter):
 
             save_config(cfg)
             new_backend = term.get("backend", "local")
-            await self._log_audit_event("sandbox_change", {
-                "backend": new_backend,
-                "sandbox_enabled": new_backend not in ("local",),
-            })
+            await self._log_audit_event(
+                "sandbox_change",
+                before_value=previous_backend,
+                after_value=new_backend,
+                detail={"backend": new_backend, "sandbox_enabled": new_backend not in ("local",)},
+            )
             return web.json_response({
                 "message": f"Sandbox backend set to '{new_backend}'",
                 "sandbox_enabled": new_backend not in ("local",),
@@ -2933,11 +2938,15 @@ class APIServerAdapter(BasePlatformAdapter):
             config = load_config()
             if "security" not in config:
                 config["security"] = {}
+            old_paths = config.get("security", {}).get("allowed_paths", ["~"])
             config["security"]["allowed_paths"] = valid if valid else paths
             save_config(config)
-            await self._log_audit_event("workdir_change", {
-                "allowed_paths": config["security"]["allowed_paths"],
-            })
+            await self._log_audit_event(
+                "workdir_change",
+                before_value=old_paths,
+                after_value=config["security"]["allowed_paths"],
+                detail={"allowed_paths": config["security"]["allowed_paths"]},
+            )
             resp = {
                 "message": "Path whitelist updated",
                 "allowed_paths": config["security"]["allowed_paths"],
@@ -3011,18 +3020,33 @@ class APIServerAdapter(BasePlatformAdapter):
         except (OSError, IOError):
             pass
 
-    async def _log_audit_event(self, event_type: str, detail: dict) -> None:
-        """Record an audit event. Skips if audit_log is disabled."""
+    async def _log_audit_event(self, event_type: str, before_value=None, after_value=None, detail: dict = None) -> None:
+        """Record an audit event with before/after values. Skips if audit_log is disabled."""
         from hermes_cli.config import load_config_readonly
         cfg = load_config_readonly()
         audit_cfg = cfg.get("audit_log", {})
         if not audit_cfg.get("enabled", True):
             return
 
+        from datetime import datetime
+        operate_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        TYPE_MAP = {
+            "security_mode_change": "模式修改",
+            "sandbox_change": "沙箱切换",
+            "workdir_change": "白名单修改",
+            "path_blocked": "路径访问拦截",
+        }
+        operate_type = TYPE_MAP.get(event_type, event_type)
+
         entry = {
-            "timestamp": time.time(),
+            "operate_time": operate_time,
             "event_type": event_type,
-            "detail": detail,
+            "operate_type": operate_type,
+            "before_value": before_value,
+            "after_value": after_value,
+            "detail": detail or {},
+            "timestamp": time.time(),
         }
         entries = self._read_audit_log()
         entries.append(entry)
@@ -3084,11 +3108,29 @@ class APIServerAdapter(BasePlatformAdapter):
         total = len(entries)
         page = entries[offset:offset + limit]
 
+        # Normalize entries (handle old-format records that lack new fields)
+        TYPE_MAP = {
+            "security_mode_change": "模式修改",
+            "sandbox_change": "沙箱切换",
+            "workdir_change": "白名单修改",
+            "path_blocked": "路径访问拦截",
+        }
+        normalized = []
+        for e in page:
+            normalized.append({
+                "operate_time": e.get("operate_time", ""),
+                "operate_type": e.get("operate_type", TYPE_MAP.get(e.get("event_type", ""), e.get("event_type", ""))),
+                "raw_type": e.get("event_type", ""),
+                "before_value": e.get("before_value", None),
+                "after_value": e.get("after_value", None),
+                "detail": e.get("detail", {}),
+            })
+
         return web.json_response({
             "total": total,
             "offset": offset,
             "limit": limit,
-            "entries": page,
+            "entries": normalized,
         })
 
     async def _handle_clear_audit_log(self, request: "web.Request") -> "web.Response":
