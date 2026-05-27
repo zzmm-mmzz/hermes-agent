@@ -16,7 +16,7 @@ import {
   Filter,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { SkillInfo, ToolsetInfo } from "@/lib/api";
+import type { SkillInfo, HubSkillInfo, ToolsetInfo } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { Toast } from "@/components/Toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -95,10 +95,12 @@ function toolsetIcon(
 
 export default function SkillsPage() {
   const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [hubSkills, setHubSkills] = useState<HubSkillInfo[]>([]);
   const [toolsets, setToolsets] = useState<ToolsetInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"skills" | "toolsets">("skills");
+  const [tab, setTab] = useState<"installed" | "hub">("installed");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [togglingSkills, setTogglingSkills] = useState<Set<string>>(new Set());
   const { toast, showToast } = useToast();
@@ -106,10 +108,11 @@ export default function SkillsPage() {
   const { setAfterTitle, setEnd } = usePageHeader();
 
   useEffect(() => {
-    Promise.all([api.getSkills(), api.getToolsets()])
-      .then(([s, tsets]) => {
+    Promise.all([api.getSkills(), api.getToolsets(), api.getHubSkills()])
+      .then(([s, tsets, hub]) => {
         setSkills(s);
         setToolsets(tsets);
+        setHubSkills(hub);
       })
       .catch(() => showToast(t.common.loading, "error"))
       .finally(() => setLoading(false));
@@ -253,6 +256,30 @@ export default function SkillsPage() {
       <PluginSlot name="skills:top" />
       <Toast toast={toast} />
 
+      {/* Tab bar: Installed vs Hub Browse */}
+      <div className="flex gap-4 border-b border-border pb-px mb-0">
+        <button
+          onClick={() => { setTab("installed"); setSearch(""); }}
+          className={`px-0 pb-2 text-xs font-medium border-b-2 transition-colors ${
+            tab === "installed"
+              ? "border-foreground text-foreground"
+              : "border-transparent text-text-tertiary hover:text-foreground"
+          }`}
+        >
+          已安装 ({skills.length})
+        </button>
+        <button
+          onClick={() => { setTab("hub"); setSearch(""); }}
+          className={`px-0 pb-2 text-xs font-medium border-b-2 transition-colors ${
+            tab === "hub"
+              ? "border-foreground text-foreground"
+              : "border-transparent text-text-tertiary hover:text-foreground"
+          }`}
+        >
+          浏览 Hub ({hubSkills.length})
+        </button>
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:items-start gap-4">
         <aside aria-label={t.skills.title} className="sm:w-56 sm:shrink-0">
           <div className="sm:sticky sm:top-0">
@@ -365,8 +392,8 @@ export default function SkillsPage() {
                 )}
               </CardContent>
             </Card>
-          ) : view === "skills" ? (
-            /* Skills list */
+          ) : view === "skills" && tab === "installed" ? (
+            /* Installed skills list */
             <Card className="rounded-none">
               <CardHeader className="py-3 px-4">
                 <div className="flex items-center justify-between">
@@ -403,6 +430,34 @@ export default function SkillsPage() {
                         onToggle={() => handleToggleSkill(skill)}
                         noDescriptionLabel={t.skills.noDescription}
                       />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : tab === "hub" ? (
+            /* Hub browse - skills from self-hosted SkillHub */
+            <Card className="rounded-none">
+              <CardHeader className="py-3 px-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Globe className="h-4 w-4" />
+                    浏览 Hub
+                  </CardTitle>
+                  <Badge tone="secondary" className="text-xs">
+                    {hubSkills.length} 个技能
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                {hubSkills.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    自建 SkillHub 暂无技能
+                  </p>
+                ) : (
+                  <div className="grid gap-1">
+                    {hubSkills.map((skill) => (
+                      <HubSkillRow key={skill.name} skill={skill} />
                     ))}
                   </div>
                 )}
@@ -488,6 +543,33 @@ export default function SkillsPage() {
         </div>
       </div>
       <PluginSlot name="skills:bottom" />
+    </div>
+  );
+}
+
+/* ---- Hub skill row (browse-only, no toggle) ---- */
+function HubSkillRow({ skill }: { skill: HubSkillInfo }) {
+  return (
+    <div className="group flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="font-medium text-xs">{skill.name}</span>
+          <Badge tone="outline" className="text-[9px] px-1 leading-none">
+            {skill.source?.slice(0, 8) || "hub"}
+          </Badge>
+          <Badge tone="secondary" className="text-[9px] px-1 leading-none">
+            {skill.trust_level || "community"}
+          </Badge>
+          {skill.category && (
+            <Badge tone="secondary" className="text-[9px] px-1 leading-none">
+              {skill.category}
+            </Badge>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground line-clamp-1">
+          {skill.description || "暂无描述"}
+        </p>
+      </div>
     </div>
   );
 }

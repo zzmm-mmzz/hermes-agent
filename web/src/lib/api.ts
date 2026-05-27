@@ -198,6 +198,7 @@ export const api = {
 
   // Skills & Toolsets
   getSkills: () => fetchJSON<SkillInfo[]>("/api/skills"),
+  getHubSkills: () => fetchJSON<HubSkillInfo[]>("/api/skills/hub-browse"),
   toggleSkill: (name: string, enabled: boolean) =>
     fetchJSON<{ ok: boolean }>("/api/skills/toggle", {
       method: "PUT",
@@ -576,6 +577,14 @@ export interface SkillInfo {
   description: string;
   category: string;
   enabled: boolean;
+}
+
+export interface HubSkillInfo {
+  name: string;
+  description: string;
+  category: string;
+  source: string;
+  trust_level: string;
 }
 
 export interface ToolsetInfo {
