@@ -323,18 +323,26 @@ curl -X POST http://localhost:8643/api/skills/upload \
 
 ### 配置说明
 
-在 `~/.hermes/config.yaml` 中配置 SkillHub 连接信息：
+新建 `hub_config.yaml` 在 `hub_api_server.py` 同级目录下（源码根目录）：
 
 ```yaml
 skillhub:
-  base_url: http://localhost:8080/api/v1
-  enabled: true
-  username: local-admin           # 用于上传认证的用户名
-  password: ""                    # 密码（留空使用 local mock 模式）
+  base_url: "http://localhost:8080/api/v1"
+  username: "local-admin"         # 上传用的用户名（local 模式用 mock 用户 ID）
+  password: ""                    # 密码（留空使用 local mock auth）
+  upload:
+    namespace: "global"
+    visibility: "PUBLIC"
+
+server:
+  host: "127.0.0.1"
+  port: 8643
 ```
 
 **认证策略：**
 - `password` 为空：使用 `X-Mock-User-Id` 头（local 开发模式）
+  - `local-admin` = 超级管理员
+  - `local-user` = 普通用户
 - `password` 不为空：先调用 `/api/v1/auth/direct/login` 获取 session，再用 session 上传
 
 ### 启动服务

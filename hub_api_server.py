@@ -27,17 +27,38 @@ HERMES_HOME = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
 SKILLS_DIR = HERMES_HOME / "skills"
 
 # 从 config.yaml 读取 SkillHub 认证配置
-def _load_auth_config():
+HUB_CONFIG_PATH = Path(__file__).parent / "hub_config.yaml"
+
+def _load_hub_config() -> dict:
+    """从 hub_config.yaml 读取配置."""
+    import yaml
     try:
-        from hermes_cli.config import load_config
-        cfg = load_config()
-        sc = cfg.get("skillhub", {})
-        return {
-            "username": sc.get("username", "local-admin"),
-            "password": sc.get("password", ""),
-        }
-    except Exception:
-        return {"username": "local-admin", "password": ""}
+        if HUB_CONFIG_PATH.exists():
+            with open(HUB_CONFIG_PATH, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+    except Exception as e:
+        logger.warning("Failed to load hub_config.yaml: %s", e)
+    return {}
+
+
+def _load_skillhub_auth() -> dict:
+    """从 hub_config.yaml 中读取 SkillHub 认证配置."""
+    cfg = _load_hub_config()
+    sc = cfg.get("skillhub", {})
+    return {
+        "username": sc.get("username", "local-admin"),
+        "password": sc.get("password", ""),
+    }
+
+
+def _load_server_config() -> dict:
+    """从 hub_config.yaml 中读取服务器配置."""
+    cfg = _load_hub_config()
+    sc = cfg.get("server", {})
+    return {
+        "host": sc.get("host", "127.0.0.1"),
+        "port": int(sc.get("port", 8643)),
+    }
 
 # ── SkillHub 工具函数 ──────────────────────────────────────────────
 
@@ -71,7 +92,7 @@ def _build_auth_headers() -> dict:
     - local 模式: X-Mock-User-Id
     - 生产模式 (有密码): 先登录拿 session
     """
-    auth = _load_auth_config()
+    auth = _load_skillhub_auth()
     username = auth["username"]
     password = auth["password"]
 
@@ -458,11 +479,17 @@ def make_app():
 if __name__ == "__main__":
     from aiohttp import web
 
-    PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8643
+    # 优先用命令行参数指定端口，否则从配置读取，默认 8643
+    if len(sys.argv) > 1:
+        PORT = int(sys.argv[1])
+    else:
+        PORT = _load_server_config()["port"]
+
+    HOST = _load_server_config()["host"]
     app = make_app()
     print(f"┌─────────────────────────────────────────┐")
     print(f"│  Hermes SkillHub API Server            │")
-    print(f"│  端口: {PORT}                              │")
+    print(f"│  {HOST}:{PORT}                               │")
     print(f"│                                         │")
     print(f"│  GET  /api/skills         全部技能      │")
     print(f"│  GET  /api/skills/installed 已安装技能  │")
@@ -470,4 +497,4 @@ if __name__ == "__main__":
     print(f"│  POST /api/skills/uninstall 卸载技能   │")
     print(f"│  POST /api/skills/upload   上传技能     │")
     print(f"└─────────────────────────────────────────┘")
-    web.run_app(app, host="127.0.0.1", port=PORT)
+    web.run_app(app, host=HOST, port=PORT)

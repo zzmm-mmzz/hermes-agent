@@ -1,0 +1,27 @@
+# ════════════════════════════════════════════════════════════════
+#  Hermes Hub API Server 配置文件
+#  用于连接自建 SkillHub 和配置 API Server 行为
+# ════════════════════════════════════════════════════════════════
+
+# 自建 SkillHub 后端地址
+skillhub:
+  base_url: "http://localhost:8080/api/v1"
+
+  # 认证方式（两种选一种）:
+  # 1. 本地开发模式（password 为空）:
+  #    使用 X-Mock-User-Id 头，username 为 mock 用户 ID
+  #    可选值: local-admin（超级管理员）, local-user（普通用户）
+  # 2. 生产模式（password 不为空）:
+  #    先调用 /api/v1/auth/direct/login 获取 session
+  username: "local-admin"
+  password: ""
+
+  # 上传技能的默认配置
+  upload:
+    namespace: "global"
+    visibility: "PUBLIC"       # PUBLIC | PRIVATE
+
+# Hub API Server 自身配置
+server:
+  host: "127.0.0.1"
+  port: 8643
