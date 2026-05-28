@@ -359,8 +359,7 @@ def make_app():
     try:
         from aiohttp import web
     except ImportError:
-        logger.error("aiohttp 未安装，请运行: pip install aiohttp")
-        sys.exit(1)
+        raise RuntimeError("aiohttp not installed; run: pip install aiohttp")
 
     app = web.Application()
 
@@ -381,17 +380,14 @@ def make_app():
     # ── 接口 1: 获取所有技能列表 ──
     async def get_all_skills(request):
         skills = list_hub_skills()
-        installed = {s["slug"] for s in list_installed_skills()}
-        for s in skills:
-            s["installed"] = s["slug"] in installed
 
         # 可选 installed 参数过滤
         filter_installed = request.query.get("installed")
         if filter_installed is not None:
             if filter_installed.lower() in ("true", "1", "yes"):
-                skills = [s for s in skills if s["installed"]]
+                skills = [s for s in skills if s.get("installed")]
             elif filter_installed.lower() in ("false", "0", "no"):
-                skills = [s for s in skills if not s["installed"]]
+                skills = [s for s in skills if not s.get("installed")]
 
         return web.json_response({"skills": skills, "total": len(skills)})
 
