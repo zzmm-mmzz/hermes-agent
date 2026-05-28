@@ -3952,6 +3952,23 @@ class APIServerAdapter(BasePlatformAdapter):
             # Audit log management API
             self._app.router.add_get("/api/audit/log", self._handle_get_audit_log)
             self._app.router.add_delete("/api/audit/log", self._handle_clear_audit_log)
+
+            # SkillHub skill management API (from hub_api_server.py)
+            try:
+                from hub_api_server import make_app as _make_hub_app
+                _hub_app = _make_hub_app()
+                for _route in _hub_app.router.routes():
+                    # Skip /health which is already registered above
+                    if _route.resource.canonical == "/health":
+                        continue
+                    self._app.router.add_route(
+                        _route.method, _route.resource.canonical,
+                        _route.handler, name=_route.name,
+                    )
+                logger.info("[%s] SkillHub skill routes registered", self.name)
+            except Exception:
+                logger.warning("[%s] SkillHub skill routes not available (hub_api_server.py missing or import failed)", self.name)
+
             # Structured event streaming
             self._app.router.add_post("/v1/runs", self._handle_runs)
             self._app.router.add_get("/v1/runs/{run_id}", self._handle_get_run)
