@@ -24,4 +24,4 @@ skillhub:
 # Hub API Server 自身配置
 server:
   host: "127.0.0.1"
-  port: 8643
+  port: 8642
