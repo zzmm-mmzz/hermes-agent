@@ -402,7 +402,7 @@ hermes profile create bob
 # vars (not config.yaml keys), so write them to each profile's .env:
 cat >> ~/.hermes/profiles/alice/.env <<EOF
 API_SERVER_ENABLED=true
-API_SERVER_PORT=8643
+API_SERVER_PORT=8642
 API_SERVER_KEY=alice-secret
 EOF
 
@@ -419,7 +419,7 @@ hermes -p bob gateway &
 
 Each profile's API server automatically advertises the profile name as the model ID:
 
-- `http://localhost:8643/v1/models` → model `alice`
+- `http://localhost:8642/v1/models` → model `alice`
 - `http://localhost:8644/v1/models` → model `bob`
 
 In Open WebUI, add each as a separate connection. The model dropdown shows `alice` and `bob` as distinct models, each backed by a fully isolated Hermes instance. See the [Open WebUI guide](/docs/user-guide/messaging/open-webui#multi-user-setup-with-profiles) for details.

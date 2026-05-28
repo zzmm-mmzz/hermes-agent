@@ -145,7 +145,7 @@ docker run -d \
   --name hermes-personal \
   --restart unless-stopped \
   -v ~/.hermes-personal:/opt/data \
-  -p 8643:8642 \
+  -p 8642:8642 \
   nousresearch/hermes-agent gateway run
 ```
 
@@ -177,7 +177,7 @@ services:
     restart: unless-stopped
     command: gateway run
     ports:
-      - "8643:8642"
+      - "8642:8642"
     volumes:
       - ~/.hermes-personal:/opt/data
 ```
