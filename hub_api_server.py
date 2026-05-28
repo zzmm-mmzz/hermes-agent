@@ -2,7 +2,7 @@
 Hermes SkillHub API Server
 提供五个接口供 Hermes Desktop 前端调用，与自建 SkillHub 集成。
 启动: python hub_api_server.py
-端口: 8643
+端口: 8642
 """
 
 import json
@@ -57,7 +57,7 @@ def _load_server_config() -> dict:
     sc = cfg.get("server", {})
     return {
         "host": sc.get("host", "127.0.0.1"),
-        "port": int(sc.get("port", 8643)),
+        "port": int(sc.get("port", 8642)),
     }
 
 # ── SkillHub 工具函数 ──────────────────────────────────────────────
@@ -488,7 +488,7 @@ def make_app():
 if __name__ == "__main__":
     from aiohttp import web
 
-    # 优先用命令行参数指定端口，否则从配置读取，默认 8643
+    # 优先用命令行参数指定端口，否则从配置读取，默认 8642
     if len(sys.argv) > 1:
         PORT = int(sys.argv[1])
     else:

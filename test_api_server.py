@@ -1,14 +1,14 @@
 """
 Combined API server: Hermes Agent management endpoints + SkillHub skill endpoints
-on a single port (8643).
+on a single port (8642).
 
 Usage:
     cd "G:/hermes agent/hermes-agent"
     python test_api_server.py
 
 Then test:
-    curl http://127.0.0.1:8643/api/security/mode
-    curl http://127.0.0.1:8643/api/skills
+    curl http://127.0.0.1:8642/api/security/mode
+    curl http://127.0.0.1:8642/api/skills
 """
 
 import asyncio
@@ -28,7 +28,7 @@ from gateway.config import Platform, PlatformConfig
 from hub_api_server import make_app as make_hub_app
 
 HOST = "127.0.0.1"
-PORT = 8643
+PORT = 8642
 
 
 async def main():
@@ -122,7 +122,7 @@ async def main():
     await site.start()
 
     print("=" * 60)
-    print("Combined API server running on http://127.0.0.1:8643")
+    print("Combined API server running on http://127.0.0.1:8642")
     print()
     print("Management endpoints:")
     print("  GET  /api/security/mode    POST /api/security/mode")

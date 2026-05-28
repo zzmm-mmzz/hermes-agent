@@ -1,6 +1,6 @@
 # Hermes SkillHub API 接口文档
 
-> Hub API Server 运行在 `http://localhost:8643`
+> Hub API Server 运行在 `http://localhost:8642`
 > 源码文件: `hub_api_server.py`
 > 用途: 提供技能市场浏览、安装、卸载、上传功能，与自建 SkillHub (`http://localhost:8080`) 集成
 
@@ -25,10 +25,23 @@
 GET /api/skills
 ```
 
+### 请求参数（可选）
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `installed` | string | 不传 | 过滤已安装状态，`true` / `1` / `yes` 只保留已安装，`false` / `0` / `no` 只保留未安装 |
+
 ### 请求示例
 
 ```bash
-curl http://localhost:8643/api/skills
+# 查全部
+curl http://localhost:8642/api/skills
+
+# 只看已安装
+curl http://localhost:8642/api/skills?installed=true
+
+# 只看未安装
+curl http://localhost:8642/api/skills?installed=false
 ```
 
 ### 响应示例
@@ -82,7 +95,7 @@ GET /api/skills/installed
 ### 请求示例
 
 ```bash
-curl http://localhost:8643/api/skills/installed
+curl http://localhost:8642/api/skills/installed
 ```
 
 ### 响应示例
@@ -134,7 +147,7 @@ Content-Type: application/json
 ### 请求示例
 
 ```bash
-curl -X POST http://localhost:8643/api/skills/install \
+curl -X POST http://localhost:8642/api/skills/install \
   -H "Content-Type: application/json" \
   -d '{"slug": "data-analyzer"}'
 ```
@@ -142,7 +155,7 @@ curl -X POST http://localhost:8643/api/skills/install \
 指定版本:
 
 ```bash
-curl -X POST http://localhost:8643/api/skills/install \
+curl -X POST http://localhost:8642/api/skills/install \
   -H "Content-Type: application/json" \
   -d '{"slug": "data-analyzer", "version": "1.0.0"}'
 ```
@@ -203,7 +216,7 @@ Content-Type: application/json
 ### 请求示例
 
 ```bash
-curl -X POST http://localhost:8643/api/skills/uninstall \
+curl -X POST http://localhost:8642/api/skills/uninstall \
   -H "Content-Type: application/json" \
   -d '{"slug": "data-analyzer"}'
 ```
@@ -269,7 +282,7 @@ EOF
 cd my-skill && zip -r ../my-skill.zip .
 
 # 2. 上传
-curl -X POST http://localhost:8643/api/skills/upload \
+curl -X POST http://localhost:8642/api/skills/upload \
   -F "file=@my-skill.zip"
 ```
 
@@ -336,7 +349,7 @@ skillhub:
 
 server:
   host: "127.0.0.1"
-  port: 8643
+  port: 8642
 ```
 
 **认证策略：**
@@ -350,7 +363,7 @@ server:
 ```bash
 cd G:\hermes agent\hermes-agent
 source .venv/Scripts/activate
-python hub_api_server.py 8643
+python hub_api_server.py 8642
 ```
 
 ### 服务状态
@@ -369,7 +382,7 @@ GET /health
 ### 技术栈
 
 - **框架:** aiohttp (Python)
-- **端口:** 8643
+- **端口:** 8642
 - **CORS:** 全放通（`Access-Control-Allow-Origin: *`）
 - **SkillHub 地址:** `http://localhost:8080/api/v1`
 - **技能目录:** `~/.hermes/skills/`
