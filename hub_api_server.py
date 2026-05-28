@@ -22,11 +22,10 @@ logging.basicConfig(
 logger = logging.getLogger("hub-api")
 
 # ── 配置 ──────────────────────────────────────────────────────────
-SKILLHUB_URL = "http://localhost:8080/api/v1"
 HERMES_HOME = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
 SKILLS_DIR = HERMES_HOME / "skills"
 
-# 从 config.yaml 读取 SkillHub 认证配置
+# 从 hub_config.yaml 读取配置
 HUB_CONFIG_PATH = Path(__file__).parent / "hub_config.yaml"
 
 def _load_hub_config() -> dict:
@@ -41,10 +40,20 @@ def _load_hub_config() -> dict:
     return {}
 
 
+def _load_skillhub_config() -> dict:
+    """从 hub_config.yaml 中读取 SkillHub 完整配置（base_url + auth + upload）。"""
+    cfg = _load_hub_config().get("skillhub", {})
+    return {
+        "base_url": cfg.get("base_url", "http://localhost:8080/api/v1"),
+        "username": cfg.get("username", "local-admin"),
+        "password": cfg.get("password", ""),
+        "upload": cfg.get("upload", {}),
+    }
+
+
 def _load_skillhub_auth() -> dict:
     """从 hub_config.yaml 中读取 SkillHub 认证配置."""
-    cfg = _load_hub_config()
-    sc = cfg.get("skillhub", {})
+    sc = _load_hub_config().get("skillhub", {})
     return {
         "username": sc.get("username", "local-admin"),
         "password": sc.get("password", ""),
@@ -59,6 +68,10 @@ def _load_server_config() -> dict:
         "host": sc.get("host", "127.0.0.1"),
         "port": int(sc.get("port", 8642)),
     }
+
+
+# 读取 SkillHub base_url（由 hub_config.yaml 控制），后续直接使用
+SKILLHUB_URL = _load_skillhub_config()["base_url"]
 
 # ── SkillHub 工具函数 ──────────────────────────────────────────────
 
