@@ -371,6 +371,15 @@ def make_app():
         installed = {s["slug"] for s in list_installed_skills()}
         for s in skills:
             s["installed"] = s["slug"] in installed
+
+        # 可选 installed 参数过滤
+        filter_installed = request.query.get("installed")
+        if filter_installed is not None:
+            if filter_installed.lower() in ("true", "1", "yes"):
+                skills = [s for s in skills if s["installed"]]
+            elif filter_installed.lower() in ("false", "0", "no"):
+                skills = [s for s in skills if not s["installed"]]
+
         return web.json_response({"skills": skills, "total": len(skills)})
 
     # ── 接口 2: 获取已安装技能列表 ──
