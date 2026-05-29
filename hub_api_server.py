@@ -117,7 +117,7 @@ def _build_auth_headers() -> dict:
     try:
         login_data = json.dumps({"username": username, "password": password}).encode()
         req = Request(
-            f"{SKILLHUB_URL}/auth/direct/login",
+            f"{SKILLHUB_URL}/auth/local/login",
             data=login_data,
             headers={"Content-Type": "application/json"},
         )
@@ -125,10 +125,22 @@ def _build_auth_headers() -> dict:
             body = json.loads(resp.read().decode("utf-8"))
             # 返回的 session 信息可能在不同版本不同，尝试提取 token/cookie
             logger.info("SkillHub login success for user '%s'", username)
-            # 返回 cookie 或 token
-            set_cookie = resp.headers.get("Set-Cookie", "")
-            if set_cookie:
-                return {"Cookie": set_cookie}
+            # 优先提取 SESSION cookie（多个 Set-Cookie 头中找）
+            all_cookies = resp.headers.get_all("Set-Cookie") if hasattr(resp.headers, "get_all") else []
+            if not all_cookies:
+                # fallback: 逗号分隔
+                all_cookies = [resp.headers.get("Set-Cookie", "")]
+            cookies = []
+            for raw in all_cookies:
+                # 取分号前的 name=value
+                semi = raw.find(";")
+                part = raw[:semi] if semi != -1 else raw
+                part = part.strip()
+                if part and "=" in part:
+                    cookies.append(part)
+            if cookies:
+                return {"Cookie": "; ".join(cookies)}
+            # 如果没有 SESSION cookie，它可能会被作为 Set-Cookie 的第二条
             token = body.get("token") or body.get("accessToken") or ""
             if token:
                 return {"Authorization": f"Bearer {token}"}
