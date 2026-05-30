@@ -2731,6 +2731,28 @@ class APIServerAdapter(BasePlatformAdapter):
                 cfg["security"]["mode"] = mode
 
             save_config(cfg)
+
+            # 立即生效: 设置全部安全配置到环境变量 + 清缓存，无需重启 gateway
+            sec = cfg["security"]
+            # 1. allow_private_urls → env var + url_safety 缓存重置
+            allow_private = sec.get("allow_private_urls", False)
+            os.environ["HERMES_ALLOW_PRIVATE_URLS"] = "true" if allow_private else "false"
+            try:
+                from tools.url_safety import _reset_allow_private_cache
+                _reset_allow_private_cache()
+            except ImportError:
+                pass
+            try:
+                from tools.url_safety import _global_allow_private_urls
+                _global_allow_private_urls()
+            except ImportError:
+                pass
+            # 2. redact_secrets → env var（新进程生效，当前进程已快照）
+            os.environ["HERMES_REDACT_SECRETS"] = "true" if sec.get("redact_secrets", True) else "false"
+            # 3. tirith 配置 → env var（_load_security_config 每次读 config，env var 作为额外保障）
+            os.environ["TIRITH_ENABLED"] = "true" if sec.get("tirith_enabled", True) else "false"
+            os.environ["TIRITH_FAIL_OPEN"] = "true" if sec.get("tirith_fail_open", True) else "false"
+
             await self._log_audit_event(
                 "security_mode_change",
                 before_value=previous_mode,
@@ -2851,6 +2873,10 @@ class APIServerAdapter(BasePlatformAdapter):
 
             save_config(cfg)
             new_backend = term.get("backend", "local")
+
+            # 立即生效: 设置 TERMINAL_ENV 环境变量，新会话自动使用新后端
+            os.environ["TERMINAL_ENV"] = new_backend
+
             await self._log_audit_event(
                 "sandbox_change",
                 before_value=previous_backend,

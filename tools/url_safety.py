@@ -109,10 +109,11 @@ def _global_allow_private_urls() -> bool:
     env_val = os.getenv("HERMES_ALLOW_PRIVATE_URLS", "").strip().lower()
     if env_val in {"true", "1", "yes"}:
         _cached_allow_private = True
-        return _cached_allow_private
+        return True
     if env_val in {"false", "0", "no"}:
         # Explicit false — don't fall through to config
-        return _cached_allow_private
+        _cached_allow_private = False
+        return False
 
     # 2. Config file
     try:
