@@ -2861,8 +2861,8 @@ class APIServerAdapter(BasePlatformAdapter):
                     pass
                 elif desired:
                     # Switch from local to a sandbox backend
-                    # Prefer docker, fall back to vercel_sandbox (most broadly available)
-                    term["backend"] = "vercel_sandbox"
+                    # Prefer docker (offline-capable when image cached)
+                    term["backend"] = "docker"
                 else:
                     # Switch from sandbox to local
                     # Remember the previous backend for reference

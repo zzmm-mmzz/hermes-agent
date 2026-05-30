@@ -1010,15 +1010,17 @@ def _get_env_config() -> Dict[str, Any]:
     """Get terminal environment configuration from environment variables."""
     # Default image with Python and Node.js for maximum compatibility
     default_image = "nikolaik/python-nodejs:python3.11-nodejs20"
-    env_type = os.getenv("TERMINAL_ENV", "")
+    # 先从 config.yaml 读取 (由 8643 的 POST /api/sandbox 运行时写入)
+    env_type = ""
+    try:
+        from hermes_cli.config import load_config
+        _cfg = load_config()
+        env_type = _cfg.get("terminal", {}).get("backend", "")
+    except Exception:
+        pass
+    # config.yaml 没有设置时，fallback 到环境变量（兼容 .env 初始设置）
     if not env_type:
-        # Fallback: 从 config.yaml 的 terminal.backend 读取
-        try:
-            from hermes_cli.config import load_config
-            _cfg = load_config()
-            env_type = _cfg.get("terminal", {}).get("backend", "local")
-        except Exception:
-            env_type = "local"
+        env_type = os.getenv("TERMINAL_ENV", "local")
     env_type = env_type.strip().lower()
     
     mount_docker_cwd = os.getenv("TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE", "false").lower() in {"true", "1", "yes"}
