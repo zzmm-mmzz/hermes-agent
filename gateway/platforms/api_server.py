@@ -33,6 +33,7 @@ import os
 import socket as _socket
 import re
 import sqlite3
+import ssl
 import time
 import uuid
 from typing import Any, Dict, List, Optional
@@ -452,7 +453,7 @@ class ResponseStore:
 
 _CORS_HEADERS = {
     "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type, Idempotency-Key",
+    "Access-Control-Allow-Headers": "*",
 }
 
 
@@ -645,6 +646,12 @@ class APIServerAdapter(BasePlatformAdapter):
             raw_port = os.getenv("API_SERVER_PORT", str(DEFAULT_PORT))
         self._port: int = _coerce_port(raw_port, DEFAULT_PORT)
         self._api_key: str = extra.get("key", os.getenv("API_SERVER_KEY", ""))
+        self._ssl_certfile: str = extra.get(
+            "ssl_certfile", os.getenv("API_SERVER_SSL_CERTFILE", "")
+        )
+        self._ssl_keyfile: str = extra.get(
+            "ssl_keyfile", os.getenv("API_SERVER_SSL_KEYFILE", "")
+        )
         self._cors_origins: tuple[str, ...] = self._parse_cors_origins(
             extra.get("cors_origins", os.getenv("API_SERVER_CORS_ORIGINS", "")),
         )
@@ -4046,9 +4053,16 @@ class APIServerAdapter(BasePlatformAdapter):
             except (ConnectionRefusedError, OSError):
                 pass  # port is free
 
+            ssl_context = None
+            if self._ssl_certfile and self._ssl_keyfile:
+                ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+                ssl_context.load_cert_chain(self._ssl_certfile, self._ssl_keyfile)
+
             self._runner = web.AppRunner(self._app)
             await self._runner.setup()
-            self._site = web.TCPSite(self._runner, self._host, self._port)
+            self._site = web.TCPSite(
+                self._runner, self._host, self._port, ssl_context=ssl_context
+            )
             await self._site.start()
 
             self._mark_connected()
@@ -4060,9 +4074,10 @@ class APIServerAdapter(BasePlatformAdapter):
                     "unauthorized access to sessions, responses, and cron jobs.",
                     self.name,
                 )
+            scheme = "https" if ssl_context else "http"
             logger.info(
-                "[%s] API server listening on http://%s:%d (model: %s)",
-                self.name, self._host, self._port, self._model_name,
+                "[%s] API server listening on %s://%s:%d (model: %s)",
+                self.name, scheme, self._host, self._port, self._model_name,
             )
             return True
 
