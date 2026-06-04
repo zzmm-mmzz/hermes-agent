@@ -1,0 +1,21 @@
+# SGCC (国网) 任务系统 API 配置
+# 在此文件中配置国网湖南电力任务系统的连接信息
+
+# API 服务器地址
+host: 25.212.194.221
+
+# API 端口
+port: 18081
+
+# API 接口前缀
+api_prefix: /api/dcdb
+
+# 超时时间（秒）
+timeout: 30
+
+# 接口定义
+endpoints:
+  # 按部门查询主任务下子任务反馈情况
+  get_all_dept_sub_task:
+    method: POST
+    path: /taskMain/getAllDeptSubTask

@@ -239,6 +239,12 @@ TOOLSETS = {
         "includes": []
     },
 
+    "sgcc": {
+        "description": "SGCC (国网湖南电力) 任务系统网关连接器 - 查询主任务下子任务反馈情况",
+        "tools": ["sgcc_query_dept_sub_task"],
+        "includes": []
+    },
+
     "kanban": {
         "description": (
             "Kanban multi-agent coordination — only active when the agent "
@@ -442,6 +448,12 @@ TOOLSETS = {
         "includes": []
     },
 
+    "hermes-sgcc": {
+        "description": "SGCC 国网湖南电力任务系统网关连接器 - 查询主任务下子任务反馈",
+        "tools": _HERMES_CORE_TOOLS + ["sgcc_query_dept_sub_task"],
+        "includes": []
+    },
+
     "hermes-email": {
         "description": "Email bot toolset - interact with Hermes via email (IMAP/SMTP)",
         "tools": _HERMES_CORE_TOOLS,
@@ -530,7 +542,7 @@ TOOLSETS = {
     "hermes-gateway": {
         "description": "Gateway toolset - union of all messaging platform tools",
         "tools": [],
-        "includes": ["hermes-telegram", "hermes-discord", "hermes-whatsapp", "hermes-slack", "hermes-signal", "hermes-bluebubbles", "hermes-homeassistant", "hermes-email", "hermes-sms", "hermes-mattermost", "hermes-matrix", "hermes-dingtalk", "hermes-feishu", "hermes-wecom", "hermes-wecom-callback", "hermes-weixin", "hermes-qqbot", "hermes-webhook", "hermes-yuanbao"]
+        "includes": ["hermes-telegram", "hermes-discord", "hermes-whatsapp", "hermes-slack", "hermes-signal", "hermes-bluebubbles", "hermes-homeassistant", "hermes-sgcc", "hermes-email", "hermes-sms", "hermes-mattermost", "hermes-matrix", "hermes-dingtalk", "hermes-feishu", "hermes-wecom", "hermes-wecom-callback", "hermes-weixin", "hermes-qqbot", "hermes-webhook", "hermes-yuanbao"]
     }
 }
 
