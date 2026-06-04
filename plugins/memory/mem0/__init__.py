@@ -7,6 +7,7 @@ Original PR #2933 by kartik-mem0, adapted to MemoryProvider ABC.
 
 Config via environment variables:
   MEM0_API_KEY       — Mem0 Platform API key (required)
+  MEM0_API_URL       — Custom Mem0 API URL, e.g. http://localhost:8888 (optional)
   MEM0_USER_ID       — User identifier (default: hermes-user)
   MEM0_AGENT_ID      — Agent identifier (default: hermes)
 
@@ -48,6 +49,7 @@ def _load_config() -> dict:
 
     config = {
         "api_key": os.environ.get("MEM0_API_KEY", ""),
+        "api_url": os.environ.get("MEM0_API_URL", ""),
         "user_id": os.environ.get("MEM0_USER_ID", "hermes-user"),
         "agent_id": os.environ.get("MEM0_AGENT_ID", "hermes"),
         "rerank": True,
@@ -160,6 +162,7 @@ class Mem0MemoryProvider(MemoryProvider):
     def get_config_schema(self):
         return [
             {"key": "api_key", "description": "Mem0 Platform API key", "secret": True, "required": True, "env_var": "MEM0_API_KEY", "url": "https://app.mem0.ai"},
+            {"key": "api_url", "description": "Custom Mem0 API URL (optional)", "secret": False, "required": False, "env_var": "MEM0_API_URL"},
             {"key": "user_id", "description": "User identifier", "default": "hermes-user"},
             {"key": "agent_id", "description": "Agent identifier", "default": "hermes"},
             {"key": "rerank", "description": "Enable reranking for recall", "default": "true", "choices": ["true", "false"]},
@@ -172,7 +175,10 @@ class Mem0MemoryProvider(MemoryProvider):
                 return self._client
             try:
                 from mem0 import MemoryClient
-                self._client = MemoryClient(api_key=self._api_key)
+                kwargs: Dict[str, Any] = {"api_key": self._api_key}
+                if self._config.get("api_url"):
+                    kwargs["host"] = self._config["api_url"]
+                self._client = MemoryClient(**kwargs)
                 return self._client
             except ImportError:
                 raise RuntimeError("mem0 package not installed. Run: pip install mem0ai")
