@@ -506,6 +506,50 @@ def make_app():
 
     app.router.add_get("/health", health)
 
+    # ── 用户登录 API（桌面端浏览器登录流程）──
+    USER_DATA_PATH = HERMES_HOME / "user_data.json"
+
+    async def save_user(request):
+        """POST /api/user/save — 保存用户信息和登录票据"""
+        try:
+            body = await request.json()
+            if not body:
+                return web.json_response({"success": False, "error": "Empty request body"}, status=400)
+            USER_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+            USER_DATA_PATH.write_bytes(json.dumps(body, ensure_ascii=True, indent=2).encode("utf-8"))
+            logger.info("User data saved")
+            return web.json_response({"success": True, "message": "User info saved"})
+        except json.JSONDecodeError:
+            return web.json_response({"success": False, "error": "Invalid JSON"}, status=400)
+        except Exception as e:
+            logger.error("Save user error: %s", e)
+            return web.json_response({"success": False, "error": str(e)}, status=500)
+
+    async def get_user(request):
+        """GET /api/user — 获取用户信息"""
+        try:
+            if not USER_DATA_PATH.exists():
+                return web.json_response(
+                    {"success": False, "error": "No user data found. Please login first."}, status=404)
+            data = json.loads(USER_DATA_PATH.read_bytes().decode("utf-8"))
+            return web.json_response({"success": True, "data": data})
+        except Exception as e:
+            return web.json_response({"success": False, "error": str(e)}, status=500)
+
+    async def logout_user(request):
+        """POST /api/user/logout — 清除用户信息"""
+        try:
+            if USER_DATA_PATH.exists():
+                USER_DATA_PATH.unlink()
+            logger.info("User logged out, data cleared")
+            return web.json_response({"success": True, "message": "Logged out successfully"})
+        except Exception as e:
+            return web.json_response({"success": False, "error": str(e)}, status=500)
+
+    app.router.add_post("/api/user/save", save_user)
+    app.router.add_get("/api/user", get_user)
+    app.router.add_post("/api/user/logout", logout_user)
+
     return app
 
 

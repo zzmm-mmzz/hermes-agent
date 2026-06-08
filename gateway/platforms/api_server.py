@@ -676,6 +676,10 @@ class APIServerAdapter(BasePlatformAdapter):
         # in-flight run by run_id.
         self._run_approval_sessions: Dict[str, str] = {}
         self._session_db: Optional[Any] = None  # Lazy-init SessionDB for session continuity
+        # User data persistence for desktop login flow
+        self._user_data_path: str = os.path.join(
+            os.path.expanduser("~/.hermes"), "user_data.json"
+        )
 
     @staticmethod
     def _parse_cors_origins(value: Any) -> tuple[str, ...]:
@@ -3986,6 +3990,17 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/api/audit/log", self._handle_get_audit_log)
             self._app.router.add_delete("/api/audit/log", self._handle_clear_audit_log)
 
+            # User info API (for hermes desktop login flow)
+            self._app.router.add_post("/api/user/save", self._handle_save_user)
+            self._app.router.add_get("/api/user", self._handle_get_user)
+            self._app.router.add_post("/api/user/logout", self._handle_logout_user)
+            self._app.router.add_options("/api/user/save", self._handle_user_preflight)
+            self._app.router.add_options("/api/user", self._handle_user_preflight)
+            self._app.router.add_options("/api/user/logout", self._handle_user_preflight)
+
+            # Clear persisted user data on startup — forces re-login after gateway restart
+            self._clear_user_data()
+
             # SkillHub skill management API (from hub_api_server.py)
             try:
                 from hub_api_server import make_app as _make_hub_app
@@ -4117,3 +4132,103 @@ class APIServerAdapter(BasePlatformAdapter):
             "host": self._host,
             "port": self._port,
         }
+
+    # ------------------------------------------------------------------
+    # User info API (hermes desktop login flow)
+    # ------------------------------------------------------------------
+
+    def _clear_user_data(self) -> None:
+        """Delete persisted user data file."""
+        try:
+            if os.path.exists(self._user_data_path):
+                os.remove(self._user_data_path)
+                logger.info("[%s] Cleared persisted user data (gateway restart)", self.name)
+        except Exception as e:
+            logger.warning("[%s] Failed to clear user data: %s", self.name, e)
+
+    def _load_user_data(self) -> Optional[Dict[str, Any]]:
+        """Load user data from JSON file. Returns None if not exists."""
+        try:
+            if not os.path.exists(self._user_data_path):
+                return None
+            with open(self._user_data_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning("[%s] Failed to load user data: %s", self.name, e)
+            return None
+
+    def _save_user_data(self, data: Dict[str, Any]) -> None:
+        """Save user data to JSON file."""
+        try:
+            os.makedirs(os.path.dirname(self._user_data_path), exist_ok=True)
+            with open(self._user_data_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error("[%s] Failed to save user data: %s", self.name, e)
+            raise
+
+    async def _handle_save_user(self, request: "web.Request") -> "web.Response":
+        """POST /api/user/save — save user info and login ticket."""
+        try:
+            body = await request.json()
+            if not body:
+                return web.json_response(
+                    {"success": False, "error": "Empty request body"},
+                    status=400,
+                )
+            self._save_user_data(body)
+            logger.info("[%s] User data saved successfully", self.name)
+            return web.json_response({"success": True, "message": "User info saved"})
+        except json.JSONDecodeError:
+            return web.json_response(
+                {"success": False, "error": "Invalid JSON"},
+                status=400,
+            )
+        except Exception as e:
+            logger.error("[%s] Error saving user data: %s", self.name, e)
+            return web.json_response(
+                {"success": False, "error": str(e)},
+                status=500,
+            )
+
+    async def _handle_get_user(self, request: "web.Request") -> "web.Response":
+        """GET /api/user — retrieve saved user info and login ticket."""
+        try:
+            data = self._load_user_data()
+            if data is None:
+                return web.json_response(
+                    {"success": False, "error": "No user data found. Please login first."},
+                    status=404,
+                )
+            return web.json_response({"success": True, "data": data})
+        except Exception as e:
+            logger.error("[%s] Error reading user data: %s", self.name, e)
+            return web.json_response(
+                {"success": False, "error": str(e)},
+                status=500,
+            )
+
+    async def _handle_logout_user(self, request: "web.Request") -> "web.Response":
+        """POST /api/user/logout — clear user info and login ticket."""
+        try:
+            self._clear_user_data()
+            logger.info("[%s] User logged out, data cleared", self.name)
+            return web.json_response({"success": True, "message": "Logged out successfully"})
+        except Exception as e:
+            logger.error("[%s] Error during logout: %s", self.name, e)
+            return web.json_response(
+                {"success": False, "error": str(e)},
+                status=500,
+            )
+
+    async def _handle_user_preflight(self, request: "web.Request") -> "web.Response":
+        """OPTIONS handler for CORS preflight on user API endpoints."""
+        return web.Response(
+            status=204,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+                "Access-Control-Max-Age": "86400",
+            },
+        )
