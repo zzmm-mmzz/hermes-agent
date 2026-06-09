@@ -15,6 +15,17 @@ from pathlib import Path
 from urllib.request import urlopen, Request
 from urllib.parse import quote
 
+# 审计日志
+from gateway.audit_log import (
+    AUDIT_LOG_CLEAR,
+    SKILL_INSTALL,
+    SKILL_UNINSTALL,
+    SKILL_UPLOAD,
+    get_audit_log_path,
+    log_audit_event,
+    read_audit_log,
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -429,6 +440,8 @@ def make_app():
         version = body.get("version")
         result = install_hub_skill(slug, version)
         status = 200 if result["ok"] else 500
+        if result.get("ok"):
+            log_audit_event(SKILL_INSTALL, after_value=slug, detail={"slug": slug, "version": version})
         return web.json_response(result, status=status)
 
     # ── 接口 4: 卸载技能 ──
@@ -444,6 +457,8 @@ def make_app():
 
         result = uninstall_skill(slug)
         status = 200 if result["ok"] else 404
+        if result.get("ok"):
+            log_audit_event(SKILL_UNINSTALL, before_value=slug, detail={"slug": slug})
         return web.json_response(result, status=status)
 
     # ── 接口 5: 上传技能到 SkillHub ──
@@ -488,6 +503,8 @@ def make_app():
 
             result = publish_skill_to_hub(zip_data, file_name)
             status = 200 if result.get("ok") else 500
+            if result.get("ok"):
+                log_audit_event(SKILL_UPLOAD, detail={"file_name": file_name, "result": result.get("message", "")})
             return web.json_response(result, status=status)
         except Exception as e:
             logger.exception("upload_skill error")
@@ -518,6 +535,7 @@ def make_app():
             USER_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
             USER_DATA_PATH.write_bytes(json.dumps(body, ensure_ascii=True, indent=2).encode("utf-8"))
             logger.info("User data saved")
+            log_audit_event("user_save", detail={"user_fields": list(body.keys()) if isinstance(body, dict) else []})
             return web.json_response({"success": True, "message": "User info saved"})
         except json.JSONDecodeError:
             return web.json_response({"success": False, "error": "Invalid JSON"}, status=400)
@@ -542,6 +560,7 @@ def make_app():
             if USER_DATA_PATH.exists():
                 USER_DATA_PATH.unlink()
             logger.info("User logged out, data cleared")
+            log_audit_event("user_logout")
             return web.json_response({"success": True, "message": "Logged out successfully"})
         except Exception as e:
             return web.json_response({"success": False, "error": str(e)}, status=500)
@@ -549,6 +568,62 @@ def make_app():
     app.router.add_post("/api/user/save", save_user)
     app.router.add_get("/api/user", get_user)
     app.router.add_post("/api/user/logout", logout_user)
+
+    # ── 审计日志 API ──
+    async def get_audit_log(request):
+        """GET /api/audit/log — 查询审计日志"""
+        try:
+            entries = read_audit_log()
+        except Exception:
+            entries = []
+        # Sort newest first
+        entries.sort(key=lambda e: e.get("timestamp", 0), reverse=True)
+        # Normalize to generic format
+        TYPE_MAP = {
+            "security_mode_change": "模式修改", "sandbox_change": "沙箱切换",
+            "workdir_change": "白名单修改", "path_blocked": "路径访问拦截",
+            "skill_install": "安装技能", "skill_uninstall": "卸载技能",
+            "skill_upload": "上传技能", "tool_usage": "工具调用",
+            "user_message": "用户提问", "user_save": "用户登录", "user_logout": "用户退出",
+            "job_create": "创建任务", "job_update": "更新任务",
+            "job_delete": "删除任务", "job_pause": "暂停任务",
+            "job_resume": "恢复任务", "job_run": "运行任务",
+            "response_delete": "删除响应", "run_start": "启动会话",
+            "run_stop": "停止会话", "run_approval": "审批操作",
+            "audit_log_clear": "清空审计日志", "chat_completion": "对话完成",
+        }
+        normalized = []
+        for e in entries:
+            normalized.append({
+                "time": e.get("operate_time", ""),
+                "action": e.get("operate_type", TYPE_MAP.get(e.get("event_type", ""), e.get("event_type", ""))),
+                "type": e.get("event_type", ""),
+                "detail": {
+                    **({} if e.get("before_value") is None else {"before": e["before_value"]}),
+                    **({} if e.get("after_value") is None else {"after": e["after_value"]}),
+                    **(e.get("detail") or {}),
+                },
+            })
+        return web.json_response({
+            "total": len(normalized),
+            "offset": 0,
+            "limit": len(normalized),
+            "entries": normalized,
+        })
+
+    async def clear_audit_log(request):
+        """DELETE /api/audit/log — 清空审计日志"""
+        try:
+            path = get_audit_log_path()
+            if os.path.exists(path):
+                os.remove(path)
+            log_audit_event(AUDIT_LOG_CLEAR, detail={"cleared_by": "hub_api"})
+            return web.json_response({"message": "Audit log cleared"})
+        except OSError as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    app.router.add_get("/api/audit/log", get_audit_log)
+    app.router.add_delete("/api/audit/log", clear_audit_log)
 
     return app
 
@@ -573,5 +648,8 @@ if __name__ == "__main__":
     print(f"│  POST /api/skills/install  安装技能     │")
     print(f"│  POST /api/skills/uninstall 卸载技能   │")
     print(f"│  POST /api/skills/upload   上传技能     │")
+    print(f"├─────────────────────────────────────────┤")
+    print(f"│  GET  /api/audit/log      审计日志查询 │")
+    print(f"│  DEL  /api/audit/log      审计日志清空 │")
     print(f"└─────────────────────────────────────────┘")
     web.run_app(app, host=HOST, port=PORT)

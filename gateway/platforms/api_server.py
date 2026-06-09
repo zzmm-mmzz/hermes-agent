@@ -52,6 +52,30 @@ from gateway.platforms.base import (
     is_network_accessible,
 )
 
+from gateway.audit_log import (
+    AUDIT_LOG_CLEAR,
+    CHAT_COMPLETION,
+    JOB_CREATE,
+    JOB_DELETE,
+    JOB_PAUSE,
+    JOB_RESUME,
+    JOB_RUN,
+    JOB_UPDATE,
+    RESPONSE_DELETE,
+    RUN_APPROVAL,
+    RUN_START,
+    RUN_STOP,
+    SANDBOX_CHANGE,
+    SECURITY_MODE_CHANGE,
+    USER_LOGOUT,
+    USER_SAVE,
+    WORKDIR_CHANGE,
+    get_audit_log_path,
+    log_audit_event,
+    read_audit_log,
+    write_audit_log,
+)
+
 logger = logging.getLogger(__name__)
 
 # Default settings
@@ -2408,6 +2432,8 @@ class APIServerAdapter(BasePlatformAdapter):
         if not deleted:
             return web.json_response(_openai_error(f"Response not found: {response_id}"), status=404)
 
+        log_audit_event(RESPONSE_DELETE, detail={"response_id": response_id})
+
         return web.json_response({
             "id": response_id,
             "object": "response",
@@ -2501,6 +2527,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 kwargs["repeat"] = repeat
 
             job = _cron_create(**kwargs)
+            log_audit_event(JOB_CREATE, detail={"job_name": name, "schedule": schedule})
             return web.json_response({"job": job})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
@@ -2553,6 +2580,7 @@ class APIServerAdapter(BasePlatformAdapter):
             job = _cron_update(job_id, sanitized)
             if not job:
                 return web.json_response({"error": "Job not found"}, status=404)
+            log_audit_event(JOB_UPDATE, detail={"job_id": job_id, "updated_fields": list(sanitized.keys())})
             return web.json_response({"job": job})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
@@ -2572,6 +2600,7 @@ class APIServerAdapter(BasePlatformAdapter):
             success = _cron_remove(job_id)
             if not success:
                 return web.json_response({"error": "Job not found"}, status=404)
+            log_audit_event(JOB_DELETE, detail={"job_id": job_id})
             return web.json_response({"ok": True})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
@@ -2591,6 +2620,7 @@ class APIServerAdapter(BasePlatformAdapter):
             job = _cron_pause(job_id)
             if not job:
                 return web.json_response({"error": "Job not found"}, status=404)
+            log_audit_event(JOB_PAUSE, detail={"job_id": job_id})
             return web.json_response({"job": job})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
@@ -2610,6 +2640,7 @@ class APIServerAdapter(BasePlatformAdapter):
             job = _cron_resume(job_id)
             if not job:
                 return web.json_response({"error": "Job not found"}, status=404)
+            log_audit_event(JOB_RESUME, detail={"job_id": job_id})
             return web.json_response({"job": job})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
@@ -2629,6 +2660,7 @@ class APIServerAdapter(BasePlatformAdapter):
             job = _cron_trigger(job_id)
             if not job:
                 return web.json_response({"error": "Job not found"}, status=404)
+            log_audit_event(JOB_RUN, detail={"job_id": job_id})
             return web.json_response({"job": job})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
@@ -2764,8 +2796,8 @@ class APIServerAdapter(BasePlatformAdapter):
             os.environ["TIRITH_ENABLED"] = "true" if sec.get("tirith_enabled", True) else "false"
             os.environ["TIRITH_FAIL_OPEN"] = "true" if sec.get("tirith_fail_open", True) else "false"
 
-            await self._log_audit_event(
-                "security_mode_change",
+            log_audit_event(
+                SECURITY_MODE_CHANGE,
                 before_value=previous_mode,
                 after_value=mode,
                 detail={"mode": mode, "previous_mode": previous_mode},
@@ -2888,8 +2920,8 @@ class APIServerAdapter(BasePlatformAdapter):
             # 立即生效: 设置 TERMINAL_ENV 环境变量，新会话自动使用新后端
             os.environ["TERMINAL_ENV"] = new_backend
 
-            await self._log_audit_event(
-                "sandbox_change",
+            log_audit_event(
+                SANDBOX_CHANGE,
                 before_value=previous_backend,
                 after_value=new_backend,
                 detail={"backend": new_backend, "sandbox_enabled": new_backend not in ("local",)},
@@ -2978,8 +3010,8 @@ class APIServerAdapter(BasePlatformAdapter):
             old_paths = config.get("security", {}).get("allowed_paths", ["~"])
             config["security"]["allowed_paths"] = valid if valid else paths
             save_config(config)
-            await self._log_audit_event(
-                "workdir_change",
+            log_audit_event(
+                WORKDIR_CHANGE,
                 before_value=old_paths,
                 after_value=config["security"]["allowed_paths"],
                 detail={"allowed_paths": config["security"]["allowed_paths"]},
@@ -3001,93 +3033,12 @@ class APIServerAdapter(BasePlatformAdapter):
     # Audit log management
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _get_audit_log_path() -> str:
-        """Get the audit log file path."""
-        config_dir = os.environ.get(
-            "HERMES_CONFIG_DIR",
-            os.path.join(os.path.expanduser("~"), ".hermes"),
-        )
-        return os.path.join(config_dir, "audit_log.json")
-
-    @staticmethod
-    def _read_audit_log() -> list:
-        """Read all audit log entries from the JSON lines file."""
-        path = APIServerAdapter._get_audit_log_path()
-        if not os.path.exists(path):
-            return []
-        entries = []
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        try:
-                            entries.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            pass
-        except (OSError, IOError):
-            pass
-        return entries
-
-    @staticmethod
-    def _write_audit_log(entries: list) -> None:
-        """Write audit log entries as JSON lines, pruning old entries."""
-        path = APIServerAdapter._get_audit_log_path()
-        from hermes_cli.config import load_config_readonly
-        cfg = load_config_readonly()
-        audit_cfg = cfg.get("audit_log", {})
-        max_entries = audit_cfg.get("max_entries", 1000)
-        retention_days = audit_cfg.get("retention_days", 30)
-
-        # Prune by retention days
-        if retention_days > 0:
-            cutoff = time.time() - retention_days * 86400
-            entries = [e for e in entries if e.get("timestamp", 0) >= cutoff]
-
-        # Prune by max entries (keep most recent)
-        if max_entries > 0 and len(entries) > max_entries:
-            entries = entries[-max_entries:]
-
-        try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                for entry in entries:
-                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        except (OSError, IOError):
-            pass
-
-    async def _log_audit_event(self, event_type: str, before_value=None, after_value=None, detail: dict = None) -> None:
-        """Record an audit event with before/after values. Skips if audit_log is disabled."""
-        from hermes_cli.config import load_config_readonly
-        cfg = load_config_readonly()
-        audit_cfg = cfg.get("audit_log", {})
-        if not audit_cfg.get("enabled", True):
-            return
-
-        from datetime import datetime
-        operate_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        TYPE_MAP = {
-            "security_mode_change": "模式修改",
-            "sandbox_change": "沙箱切换",
-            "workdir_change": "白名单修改",
-            "path_blocked": "路径访问拦截",
-        }
-        operate_type = TYPE_MAP.get(event_type, event_type)
-
-        entry = {
-            "operate_time": operate_time,
-            "event_type": event_type,
-            "operate_type": operate_type,
-            "before_value": before_value,
-            "after_value": after_value,
-            "detail": detail or {},
-            "timestamp": time.time(),
-        }
-        entries = self._read_audit_log()
-        entries.append(entry)
-        self._write_audit_log(entries)
+    # NOTE: Audit log I/O methods have been moved to gateway/audit_log.py.
+    # Use the module-level functions directly:
+    #   log_audit_event(event_type, before_value, after_value, detail)
+    #   read_audit_log()
+    #   write_audit_log(entries)
+    #   get_audit_log_path()
 
     async def _handle_get_audit_log(self, request: "web.Request") -> "web.Response":
         """GET /api/audit/log — query audit log entries.
@@ -3099,11 +3050,9 @@ class APIServerAdapter(BasePlatformAdapter):
             offset    — Pagination offset (default: 0)
             limit     — Max entries to return (default: 20, max: 200)
         """
-        auth_err = self._check_auth(request)
-        if auth_err:
-            return auth_err
+        # No auth check — local-only internal API
 
-        entries = self._read_audit_log()
+        entries = read_audit_log()
 
         # Filter by event type
         event_type = request.query.get("type", "").strip()
@@ -3146,21 +3095,43 @@ class APIServerAdapter(BasePlatformAdapter):
         page = entries[offset:offset + limit]
 
         # Normalize entries (handle old-format records that lack new fields)
-        TYPE_MAP = {
+        # Comprehensive type map for backward compatibility with old-format records
+        TYPE_MAP_FALLBACK = {
             "security_mode_change": "模式修改",
             "sandbox_change": "沙箱切换",
             "workdir_change": "白名单修改",
             "path_blocked": "路径访问拦截",
+            "skill_install": "安装技能",
+            "skill_uninstall": "卸载技能",
+            "skill_upload": "上传技能",
+            "tool_usage": "工具调用",
+            "user_message": "用户提问",
+            "user_save": "用户登录",
+            "user_logout": "用户退出",
+            "job_create": "创建任务",
+            "job_update": "更新任务",
+            "job_delete": "删除任务",
+            "job_pause": "暂停任务",
+            "job_resume": "恢复任务",
+            "job_run": "运行任务",
+            "response_delete": "删除响应",
+            "run_start": "启动会话",
+            "run_stop": "停止会话",
+            "run_approval": "审批操作",
+            "audit_log_clear": "清空审计日志",
+            "chat_completion": "对话完成",
         }
         normalized = []
         for e in page:
             normalized.append({
-                "operate_time": e.get("operate_time", ""),
-                "operate_type": e.get("operate_type", TYPE_MAP.get(e.get("event_type", ""), e.get("event_type", ""))),
-                "raw_type": e.get("event_type", ""),
-                "before_value": e.get("before_value", None),
-                "after_value": e.get("after_value", None),
-                "detail": e.get("detail", {}),
+                "time": e.get("operate_time", ""),
+                "action": e.get("operate_type", TYPE_MAP_FALLBACK.get(e.get("event_type", ""), e.get("event_type", ""))),
+                "type": e.get("event_type", ""),
+                "detail": {
+                    **({} if e.get("before_value") is None else {"before": e["before_value"]}),
+                    **({} if e.get("after_value") is None else {"after": e["after_value"]}),
+                    **(e.get("detail") or {}),
+                },
             })
 
         return web.json_response({
@@ -3172,14 +3143,13 @@ class APIServerAdapter(BasePlatformAdapter):
 
     async def _handle_clear_audit_log(self, request: "web.Request") -> "web.Response":
         """DELETE /api/audit/log — clear all audit log entries."""
-        auth_err = self._check_auth(request)
-        if auth_err:
-            return auth_err
+        # No auth check — local-only internal API
 
-        path = self._get_audit_log_path()
+        path = get_audit_log_path()
         try:
             if os.path.exists(path):
                 os.remove(path)
+            log_audit_event(AUDIT_LOG_CLEAR, detail={"cleared_by": "api"})
             return web.json_response({"message": "Audit log cleared"})
         except OSError as e:
             return web.json_response({"error": str(e)}, status=500)
@@ -3534,6 +3504,8 @@ class APIServerAdapter(BasePlatformAdapter):
             model=body.get("model", self._model_name),
         )
 
+        log_audit_event(RUN_START, detail={"run_id": run_id, "session_id": session_id, "model": body.get("model", self._model_name)})
+
         async def _run_and_close():
             try:
                 self._set_run_status(run_id, "running")
@@ -3863,6 +3835,8 @@ class APIServerAdapter(BasePlatformAdapter):
             except Exception:
                 pass
 
+        log_audit_event(RUN_APPROVAL, detail={"run_id": run_id, "choice": choice, "resolved": resolved})
+
         return web.json_response({
             "object": "hermes.run.approval_response",
             "run_id": run_id,
@@ -3908,6 +3882,7 @@ class APIServerAdapter(BasePlatformAdapter):
             except (asyncio.CancelledError, Exception):
                 pass
 
+        log_audit_event(RUN_STOP, detail={"run_id": run_id})
         return web.json_response({"run_id": run_id, "status": "stopping"})
 
     async def _sweep_orphaned_runs(self) -> None:
@@ -4006,8 +3981,9 @@ class APIServerAdapter(BasePlatformAdapter):
                 from hub_api_server import make_app as _make_hub_app
                 _hub_app = _make_hub_app()
                 for _route in _hub_app.router.routes():
-                    # Skip /health which is already registered above
-                    if _route.resource.canonical == "/health":
+                    # Skip routes that are already registered in api_server.py
+                    _canonical = _route.resource.canonical
+                    if _canonical in ("/health", "/api/audit/log", "/api/user", "/api/user/save", "/api/user/logout"):
                         continue
                     self._app.router.add_route(
                         _route.method, _route.resource.canonical,
@@ -4178,6 +4154,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 )
             self._save_user_data(body)
             logger.info("[%s] User data saved successfully", self.name)
+            log_audit_event(USER_SAVE, detail={"user_fields": list(body.keys()) if isinstance(body, dict) else []})
             return web.json_response({"success": True, "message": "User info saved"})
         except json.JSONDecodeError:
             return web.json_response(
@@ -4213,6 +4190,7 @@ class APIServerAdapter(BasePlatformAdapter):
         try:
             self._clear_user_data()
             logger.info("[%s] User logged out, data cleared", self.name)
+            log_audit_event(USER_LOGOUT)
             return web.json_response({"success": True, "message": "Logged out successfully"})
         except Exception as e:
             logger.error("[%s] Error during logout: %s", self.name, e)

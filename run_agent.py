@@ -3901,7 +3901,22 @@ class AIAgent:
     ) -> Dict[str, Any]:
         """Forwarder — see ``agent.conversation_loop.run_conversation``."""
         from agent.conversation_loop import run_conversation
-        return run_conversation(self, user_message, system_message, conversation_history, task_id, stream_callback, persist_user_message)
+        result = run_conversation(self, user_message, system_message, conversation_history, task_id, stream_callback, persist_user_message)
+        # Audit log: record all user conversations (CLI, gateway, API)
+        try:
+            from gateway.audit_log import USER_MESSAGE, log_audit_event
+            final_resp = result.get("final_response", "")
+            log_audit_event(
+                USER_MESSAGE,
+                detail={
+                    "question": (user_message or "")[:500],
+                    "answer_preview": (final_resp or "")[:200] if isinstance(final_resp, str) else str(final_resp or "")[:200],
+                    "session_id": getattr(self, "session_id", "") or "",
+                },
+            )
+        except Exception:
+            pass
+        return result
 
     def chat(self, message: str, stream_callback: Optional[callable] = None) -> str:
         """

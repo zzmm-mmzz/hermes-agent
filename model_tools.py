@@ -971,11 +971,33 @@ def handle_function_call(
         except Exception as _hook_err:
             logger.debug("transform_tool_result hook error: %s", _hook_err)
 
+        # Audit log: record tool usage (lazy import to avoid circular deps)
+        try:
+            from gateway.audit_log import TOOL_USAGE, log_audit_event
+            is_error = isinstance(result, str) and ("error" in result.lower()[:200])
+            log_audit_event(
+                TOOL_USAGE,
+                detail={
+                    "tool_name": function_name,
+                    "task_id": task_id or "",
+                    "duration_ms": duration_ms,
+                    "is_error": is_error,
+                },
+            )
+        except Exception:
+            pass
+
         return result
 
     except Exception as e:
         error_msg = f"Error executing {function_name}: {str(e)}"
         logger.exception(error_msg)
+        # Audit log the error
+        try:
+            from gateway.audit_log import TOOL_USAGE, log_audit_event
+            log_audit_event(TOOL_USAGE, detail={"tool_name": function_name, "task_id": task_id or "", "error": error_msg})
+        except Exception:
+            pass
         return json.dumps({"error": _sanitize_tool_error(error_msg)}, ensure_ascii=False)
 
 
