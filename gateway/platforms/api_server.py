@@ -75,6 +75,14 @@ from gateway.audit_log import (
     read_audit_log,
     write_audit_log,
 )
+# Email 配置管理 API Handler
+from hermes_cli.email_api_handlers import (
+    handle_email_accounts,
+    handle_email_account_get,
+    handle_email_account_add,
+    handle_email_account_update,
+    handle_email_account_delete,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -3965,7 +3973,7 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/api/audit/log", self._handle_get_audit_log)
             self._app.router.add_delete("/api/audit/log", self._handle_clear_audit_log)
 
-            # User info API (for hermes desktop login flow)
+# User info API (for hermes desktop login flow)
             self._app.router.add_post("/api/user/save", self._handle_save_user)
             self._app.router.add_get("/api/user", self._handle_get_user)
             self._app.router.add_post("/api/user/logout", self._handle_logout_user)
@@ -3975,6 +3983,13 @@ class APIServerAdapter(BasePlatformAdapter):
 
             # Clear persisted user data on startup — forces re-login after gateway restart
             self._clear_user_data()
+
+            # Email account management API
+            self._app.router.add_get("/api/email/accounts", handle_email_accounts)
+            self._app.router.add_post("/api/email/accounts", handle_email_account_add)
+            self._app.router.add_get("/api/email/accounts/{name}", handle_email_account_get)
+            self._app.router.add_patch("/api/email/accounts/{name}", handle_email_account_update)
+            self._app.router.add_delete("/api/email/accounts/{name}", handle_email_account_delete)
 
             # SkillHub skill management API (from hub_api_server.py)
             try:
