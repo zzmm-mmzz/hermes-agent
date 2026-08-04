@@ -1,0 +1,5 @@
+[intelligence]
+# 情报中心服务配置
+base_url = "http://127.0.0.1:10010"
+client_id = ""
+client_secret = ""
