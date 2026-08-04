@@ -1044,7 +1044,11 @@ def _build_job_prompt(job: dict, prerun_script: Optional[tuple] = None) -> str:
         "SILENT: If there is genuinely nothing new to report, respond "
         "with exactly \"[SILENT]\" (nothing else) to suppress delivery. "
         "Never combine [SILENT] with content — either report your "
-        "findings normally, or say [SILENT] and nothing more.]\n\n"
+        "findings normally, or say [SILENT] and nothing more. "
+        "LANGUAGE: The user communicates in Chinese (中文). Always "
+        "write your final response in Chinese (中文) unless the job "
+        "prompt explicitly asks for another language. Keep the response "
+        "concise and direct.]\n\n"
     )
     prompt = cron_hint + prompt
     if skills is None:
