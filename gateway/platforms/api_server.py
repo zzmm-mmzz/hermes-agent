@@ -75,6 +75,14 @@ from gateway.audit_log import (
     read_audit_log,
     write_audit_log,
 )
+# Email 配置管理 API Handler
+from hermes_cli.email_api_handlers import (
+    handle_email_accounts,
+    handle_email_account_get,
+    handle_email_account_add,
+    handle_email_account_update,
+    handle_email_account_delete,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -3943,15 +3951,51 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_post("/v1/responses", self._handle_responses)
             self._app.router.add_get("/v1/responses/{response_id}", self._handle_get_response)
             self._app.router.add_delete("/v1/responses/{response_id}", self._handle_delete_response)
-            # Cron jobs management API
-            self._app.router.add_get("/api/jobs", self._handle_list_jobs)
-            self._app.router.add_post("/api/jobs", self._handle_create_job)
-            self._app.router.add_get("/api/jobs/{job_id}", self._handle_get_job)
-            self._app.router.add_patch("/api/jobs/{job_id}", self._handle_update_job)
-            self._app.router.add_delete("/api/jobs/{job_id}", self._handle_delete_job)
-            self._app.router.add_post("/api/jobs/{job_id}/pause", self._handle_pause_job)
-            self._app.router.add_post("/api/jobs/{job_id}/resume", self._handle_resume_job)
-            self._app.router.add_post("/api/jobs/{job_id}/run", self._handle_run_job)
+            # Cron jobs management API (handlers in cron_handlers.py)
+            try:
+                from gateway.platforms.cron_handlers import (
+                    handle_list_jobs,
+                    handle_create_job,
+                    handle_get_job,
+                    handle_update_job,
+                    handle_delete_job,
+                    handle_pause_job,
+                    handle_resume_job,
+                    handle_run_job,
+                    handle_job_results,
+                    handle_job_dashboard,
+                    handle_latest_results,
+                    handle_list_skills,
+                )
+                from gateway.platforms.intelligence_handlers import (
+                    handle_intelligence_list,
+                    handle_intelligence_detail,
+                    handle_intelligence_categories,
+                )
+                # 固定路径必须在 {job_id} 之前注册，否则被动态路由拦截
+                self._app.router.add_get("/api/jobs/dashboard", handle_job_dashboard)
+                self._app.router.add_get("/api/jobs/results/latest", handle_latest_results)
+                self._app.router.add_get("/api/jobs", handle_list_jobs)
+                self._app.router.add_post("/api/jobs", handle_create_job)
+                self._app.router.add_get("/api/jobs/{job_id}", handle_get_job)
+                self._app.router.add_patch("/api/jobs/{job_id}", handle_update_job)
+                self._app.router.add_delete("/api/jobs/{job_id}", handle_delete_job)
+                self._app.router.add_post("/api/jobs/{job_id}/pause", handle_pause_job)
+                self._app.router.add_post("/api/jobs/{job_id}/resume", handle_resume_job)
+                self._app.router.add_post("/api/jobs/{job_id}/run", handle_run_job)
+                self._app.router.add_get("/api/jobs/{job_id}/results", handle_job_results)
+                self._app.router.add_get("/api/skills", handle_list_skills)
+                # 情报中心 API
+                self._app.router.add_get("/api/intelligence/list", handle_intelligence_list)
+                self._app.router.add_get("/api/intelligence/detail", handle_intelligence_detail)
+                self._app.router.add_get("/api/intelligence/categories", handle_intelligence_categories)
+                logger.info("[%s] Cron job + Intelligence API routes registered", self.name)
+            except Exception:
+                logger.warning(
+                    "[%s] Cron job API routes not available "
+                    "(cron_handlers.py missing or import failed)",
+                    self.name,
+                )
             # Security mode management API
             self._app.router.add_get("/api/security/mode", self._handle_get_security_mode)
             self._app.router.add_post("/api/security/mode", self._handle_set_security_mode)
@@ -3965,7 +4009,7 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_get("/api/audit/log", self._handle_get_audit_log)
             self._app.router.add_delete("/api/audit/log", self._handle_clear_audit_log)
 
-            # User info API (for hermes desktop login flow)
+# User info API (for hermes desktop login flow)
             self._app.router.add_post("/api/user/save", self._handle_save_user)
             self._app.router.add_get("/api/user", self._handle_get_user)
             self._app.router.add_post("/api/user/logout", self._handle_logout_user)
@@ -3976,14 +4020,23 @@ class APIServerAdapter(BasePlatformAdapter):
             # Clear persisted user data on startup — forces re-login after gateway restart
             self._clear_user_data()
 
+            # Email account management API
+            self._app.router.add_get("/api/email/accounts", handle_email_accounts)
+            self._app.router.add_post("/api/email/accounts", handle_email_account_add)
+            self._app.router.add_get("/api/email/accounts/{name}", handle_email_account_get)
+            self._app.router.add_patch("/api/email/accounts/{name}", handle_email_account_update)
+            self._app.router.add_delete("/api/email/accounts/{name}", handle_email_account_delete)
+
             # SkillHub skill management API (from hub_api_server.py)
             try:
                 from hub_api_server import make_app as _make_hub_app
                 _hub_app = _make_hub_app()
                 for _route in _hub_app.router.routes():
-                    # Skip routes that are already registered in api_server.py
+                # Skip routes that are already registered in api_server.py
                     _canonical = _route.resource.canonical
                     if _canonical in ("/health", "/api/audit/log", "/api/user", "/api/user/save", "/api/user/logout"):
+                        continue
+                    if _canonical.startswith("/api/skills"):
                         continue
                     self._app.router.add_route(
                         _route.method, _route.resource.canonical,
