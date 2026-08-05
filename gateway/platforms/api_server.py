@@ -3993,6 +3993,22 @@ class APIServerAdapter(BasePlatformAdapter):
             except Exception:
                 logger.warning("[%s] SkillHub skill routes not available (hub_api_server.py missing or import failed)", self.name)
 
+            # Skill Market API (from skill_market_api.py — independent top-level app)
+            try:
+                from skill_market_api import make_app as _make_market_app
+                _market_app = _make_market_app()
+                for _route in _market_app.router.routes():
+                    _canonical = _route.resource.canonical
+                    if _canonical == "/health":
+                        continue
+                    self._app.router.add_route(
+                        _route.method, _route.resource.canonical,
+                        _route.handler, name=_route.name,
+                    )
+                logger.info("[%s] Skill Market API routes registered", self.name)
+            except Exception:
+                logger.warning("[%s] Skill Market API routes not available (skill_market_api.py missing or import failed)", self.name)
+
             # Structured event streaming
             self._app.router.add_post("/v1/runs", self._handle_runs)
             self._app.router.add_get("/v1/runs/{run_id}", self._handle_get_run)
