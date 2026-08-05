@@ -3984,7 +3984,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 self._app.router.add_post("/api/jobs/{job_id}/resume", handle_resume_job)
                 self._app.router.add_post("/api/jobs/{job_id}/run", handle_run_job)
                 self._app.router.add_get("/api/jobs/{job_id}/results", handle_job_results)
-                self._app.router.add_get("/api/skills", handle_list_skills)
+                self._app.router.add_get("/api/cron/skills", handle_list_skills)
                 # 情报中心 API
                 self._app.router.add_get("/api/intelligence/list", handle_intelligence_list)
                 self._app.router.add_get("/api/intelligence/detail", handle_intelligence_detail)
@@ -4035,8 +4035,6 @@ class APIServerAdapter(BasePlatformAdapter):
                 # Skip routes that are already registered in api_server.py
                     _canonical = _route.resource.canonical
                     if _canonical in ("/health", "/api/audit/log", "/api/user", "/api/user/save", "/api/user/logout"):
-                        continue
-                    if _canonical.startswith("/api/skills"):
                         continue
                     self._app.router.add_route(
                         _route.method, _route.resource.canonical,

@@ -436,7 +436,7 @@ async def handle_latest_results(request: "web.Request") -> "web.Response":
 # ---------------------------------------------------------------------------
 
 async def handle_list_skills(request: "web.Request") -> "web.Response":
-    """GET /api/skills — list all available skills for the cron job creation form.
+    """GET /api/cron/skills — list all available skills for the cron job creation form.
 
     Returns skills grouped by category so the frontend can render a categorized
     multi-select dropdown.
