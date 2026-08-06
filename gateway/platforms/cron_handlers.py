@@ -432,6 +432,149 @@ async def handle_latest_results(request: "web.Request") -> "web.Response":
 
 
 # ---------------------------------------------------------------------------
+# Job Conversation Handlers
+# ---------------------------------------------------------------------------
+
+def _cron_session_job_id(session_id: str) -> Optional[str]:
+    """Extract the cron job_id from a cron session id.
+
+    Cron session ids are formatted as ``cron_{job_id}_{YYYYmmdd_HHMMSS}``.
+    job_id is a 12-char hex uuid fragment (no underscores), so we can split
+    on the second underscore safely. Returns None for non-cron sessions.
+    """
+    if not session_id or not session_id.startswith("cron_"):
+        return None
+    parts = session_id.split("_")
+    if len(parts) < 3:
+        return None
+    # parts[0] == "cron", parts[1] == job_id, rest == timestamp
+    return parts[1]
+
+
+async def handle_list_job_conversations(request: "web.Request") -> "web.Response":
+    """GET /api/jobs/conversations — list one history conversation per cron job.
+
+    Every scheduled job that has ever run appears as a single entry, with
+    aggregated run statistics pulled from the SessionDB (source="cron").
+    This powers a "job history conversations" list view.
+    """
+    auth_err = _check_auth(request)
+    if auth_err:
+        return auth_err
+
+    try:
+        from hermes_state import SessionDB
+
+        db = SessionDB()
+        try:
+            sessions = db.list_sessions_rich(
+                source="cron",
+                limit=10000,
+                include_children=False,
+                order_by_last_active=False,
+            )
+        finally:
+            db.close()
+
+        # Group sessions by job_id, preserving newest-first within each job.
+        jobs = cron_jobs.list_jobs(include_disabled=True)
+        job_meta = {j["id"]: j for j in jobs}
+
+        by_job: Dict[str, List[Dict[str, Any]]] = {}
+        for s in sessions:
+            job_id = _cron_session_job_id(s.get("id", ""))
+            if not job_id:
+                continue
+            by_job.setdefault(job_id, []).append(s)
+
+        items = []
+        for job_id, sess_list in by_job.items():
+            # sessions come back ordered by start time (oldest first)
+            sess_list.sort(key=lambda s: s.get("started_at") or "", reverse=True)
+            newest = sess_list[0]
+            meta = job_meta.get(job_id, {})
+            items.append({
+                "job_id": job_id,
+                "name": meta.get("name") or newest.get("title") or job_id,
+                "enabled": meta.get("enabled", True),
+                "last_status": meta.get("last_status"),
+                "schedule": meta.get("schedule_display"),
+                "run_count": len(sess_list),
+                "last_run_at": newest.get("started_at"),
+                "last_active": newest.get("last_active"),
+                "preview": newest.get("preview") or "",
+            })
+
+        items.sort(key=lambda it: it["last_active"] or "", reverse=True)
+        return _ok({"conversations": items, "total": len(items)})
+    except Exception as e:
+        logger.exception("Failed to list job conversations")
+        return _error(str(e), 500)
+
+
+async def handle_job_conversation_detail(request: "web.Request") -> "web.Response":
+    """GET /api/jobs/{job_id}/conversation — full conversation for one job.
+
+    Returns every run of the job as a conversation: each execution is one
+    session (``cron_{job_id}_{timestamp}``) with its full message list, so
+    the frontend can render "every run = one exchange" inside a single
+    historical conversation view for the job.
+    """
+    auth_err = _check_auth(request)
+    if auth_err:
+        return auth_err
+
+    job_id = request.match_info.get("job_id", "")
+    if not job_id:
+        return _error("job_id is required", 400)
+
+    try:
+        from hermes_state import SessionDB
+
+        db = SessionDB()
+        try:
+            sessions = db.list_sessions_rich(
+                source="cron",
+                limit=10000,
+                include_children=False,
+                order_by_last_active=False,
+            )
+            # Filter sessions belonging to this job via the cron_ prefix.
+            prefix = f"cron_{job_id}_"
+            runs = []
+            for s in sessions:
+                sid = s.get("id", "")
+                if not sid.startswith(prefix):
+                    continue
+                try:
+                    messages = db.get_messages_as_conversation(sid)
+                except Exception as exc:
+                    logger.warning("Failed to load messages for %s: %s", sid, exc)
+                    messages = []
+                runs.append({
+                    "session_id": sid,
+                    "run_at": s.get("started_at"),
+                    "last_active": s.get("last_active"),
+                    "message_count": len(messages),
+                    "messages": messages,
+                })
+        finally:
+            db.close()
+        meta = cron_jobs.get_job(job_id) or {}
+        return _ok({
+            "job_id": job_id,
+            "name": meta.get("name") or job_id,
+            "schedule": meta.get("schedule_display"),
+            "enabled": meta.get("enabled", True),
+            "runs": runs,
+            "total": len(runs),
+        })
+    except Exception as e:
+        logger.exception("Failed to load job conversation")
+        return _error(str(e), 500)
+
+
+# ---------------------------------------------------------------------------
 # Skills List Handler
 # ---------------------------------------------------------------------------
 
