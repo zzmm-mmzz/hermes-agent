@@ -565,6 +565,15 @@ async def handle_job_conversation_detail(request: "web.Request") -> "web.Respons
     if not job_id:
         return _error("job_id is required", 400)
 
+    return await _build_cron_conversation(job_id)
+
+
+async def _build_cron_conversation(job_id: str) -> "web.Response":
+    """Aggregate every run of a cron job into one conversation response.
+
+    Shared by GET /api/jobs/{job_id}/conversation (job_id from match_info)
+    and GET /api/conversations/{id} (cron branch, id == job_id).
+    """
     try:
         from hermes_state import SessionDB
 
@@ -652,9 +661,7 @@ async def handle_conversation_detail(request: "web.Request") -> "web.Response":
 
         if job_sessions:
             # Cron job conversation: aggregate all runs.
-            return await handle_job_conversation_detail(
-                request  # reuses match_info.job_id == conv_id
-            )
+            return await _build_cron_conversation(conv_id)
 
         # Plain chat session.
         db = SessionDB()
