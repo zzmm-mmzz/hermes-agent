@@ -452,11 +452,14 @@ def _cron_session_job_id(session_id: str) -> Optional[str]:
 
 
 async def handle_list_job_conversations(request: "web.Request") -> "web.Response":
-    """GET /api/jobs/conversations — list one history conversation per cron job.
+    """GET /api/jobs/conversations — list ALL historical conversations.
 
-    Every scheduled job that has ever run appears as a single entry, with
-    aggregated run statistics pulled from the SessionDB (source="cron").
-    This powers a "job history conversations" list view.
+    Returns two kinds of entries:
+      - type="chat": every regular conversation session (source != "cron"),
+        one entry per session.
+      - type="cron": every scheduled job that has ever run, aggregated into a
+        single entry per job (all runs of the job live under one conversation).
+    Sorted by last activity, newest first.
     """
     auth_err = _check_auth(request)
     if auth_err:
@@ -467,8 +470,9 @@ async def handle_list_job_conversations(request: "web.Request") -> "web.Response
 
         db = SessionDB()
         try:
+            # No source filter -> ALL sessions (chat + cron + any other source)
             sessions = db.list_sessions_rich(
-                source="cron",
+                source=None,
                 limit=10000,
                 include_children=False,
                 order_by_last_active=False,
@@ -476,24 +480,36 @@ async def handle_list_job_conversations(request: "web.Request") -> "web.Response
         finally:
             db.close()
 
-        # Group sessions by job_id, preserving newest-first within each job.
         jobs = cron_jobs.list_jobs(include_disabled=True)
         job_meta = {j["id"]: j for j in jobs}
 
-        by_job: Dict[str, List[Dict[str, Any]]] = {}
+        # Split: cron sessions (id starts with cron_) vs everything else
+        cron_sessions: List[Dict[str, Any]] = []
+        chat_sessions: List[Dict[str, Any]] = []
         for s in sessions:
+            sid = s.get("id", "")
+            if sid.startswith("cron_"):
+                cron_sessions.append(s)
+            else:
+                chat_sessions.append(s)
+
+        # ---- cron jobs: aggregate all runs per job into one entry ----
+        by_job: Dict[str, List[Dict[str, Any]]] = {}
+        for s in cron_sessions:
             job_id = _cron_session_job_id(s.get("id", ""))
             if not job_id:
                 continue
             by_job.setdefault(job_id, []).append(s)
 
-        items = []
+        cron_items = []
         for job_id, sess_list in by_job.items():
             # sessions come back ordered by start time (oldest first)
             sess_list.sort(key=lambda s: s.get("started_at") or "", reverse=True)
             newest = sess_list[0]
             meta = job_meta.get(job_id, {})
-            items.append({
+            cron_items.append({
+                "type": "cron",
+                "id": job_id,
                 "job_id": job_id,
                 "name": meta.get("name") or newest.get("title") or job_id,
                 "enabled": meta.get("enabled", True),
@@ -502,18 +518,39 @@ async def handle_list_job_conversations(request: "web.Request") -> "web.Response
                 "run_count": len(sess_list),
                 "last_run_at": newest.get("started_at"),
                 "last_active": newest.get("last_active"),
+                "message_count": newest.get("message_count", 0),
                 "preview": newest.get("preview") or "",
             })
 
+        # ---- regular chats: one entry per session ----
+        chat_items = []
+        for s in chat_sessions:
+            chat_items.append({
+                "type": "chat",
+                "id": s.get("id"),
+                "job_id": None,
+                "name": s.get("title") or s.get("id"),
+                "source": s.get("source"),
+                "enabled": None,
+                "last_status": None,
+                "schedule": None,
+                "run_count": None,
+                "last_run_at": None,
+                "last_active": s.get("last_active"),
+                "message_count": s.get("message_count", 0),
+                "preview": s.get("preview") or "",
+            })
+
+        items = cron_items + chat_items
         items.sort(key=lambda it: it["last_active"] or "", reverse=True)
         return _ok({"conversations": items, "total": len(items)})
     except Exception as e:
-        logger.exception("Failed to list job conversations")
+        logger.exception("Failed to list conversations")
         return _error(str(e), 500)
 
 
 async def handle_job_conversation_detail(request: "web.Request") -> "web.Response":
-    """GET /api/jobs/{job_id}/conversation — full conversation for one job.
+    """GET /api/jobs/{job_id}/conversation — full conversation for one cron job.
 
     Returns every run of the job as a conversation: each execution is one
     session (``cron_{job_id}_{timestamp}``) with its full message list, so
@@ -562,6 +599,7 @@ async def handle_job_conversation_detail(request: "web.Request") -> "web.Respons
             db.close()
         meta = cron_jobs.get_job(job_id) or {}
         return _ok({
+            "type": "cron",
             "job_id": job_id,
             "name": meta.get("name") or job_id,
             "schedule": meta.get("schedule_display"),
@@ -571,6 +609,83 @@ async def handle_job_conversation_detail(request: "web.Request") -> "web.Respons
         })
     except Exception as e:
         logger.exception("Failed to load job conversation")
+        return _error(str(e), 500)
+
+
+async def handle_conversation_detail(request: "web.Request") -> "web.Response":
+    """GET /api/conversations/{id} — generic conversation detail.
+
+    Auto-detects the entry kind:
+      - If ``id`` is a cron job_id (sessions named ``cron_{id}_*`` exist) the
+        response is a cron conversation: every run of the job with full
+        messages (same shape as /api/jobs/{job_id}/conversation).
+      - Otherwise ``id`` is treated as a plain session_id and the complete
+        message history of that single session is returned (type="chat").
+
+    This lets the frontend open any entry from the /api/jobs/conversations
+    list with one endpoint.
+    """
+    auth_err = _check_auth(request)
+    if auth_err:
+        return auth_err
+
+    conv_id = request.match_info.get("id", "")
+    if not conv_id:
+        return _error("id is required", 400)
+
+    try:
+        from hermes_state import SessionDB
+
+        db = SessionDB()
+        try:
+            # Does this id look like a cron job? (sessions named cron_{id}_*)
+            prefix = f"cron_{conv_id}_"
+            cron_sessions = db.list_sessions_rich(
+                source="cron",
+                limit=10000,
+                include_children=False,
+                order_by_last_active=False,
+            )
+            job_sessions = [s for s in cron_sessions if s.get("id", "").startswith(prefix)]
+        finally:
+            db.close()
+
+        if job_sessions:
+            # Cron job conversation: aggregate all runs.
+            return await handle_job_conversation_detail(
+                request  # reuses match_info.job_id == conv_id
+            )
+
+        # Plain chat session.
+        db = SessionDB()
+        try:
+            messages = db.get_messages_as_conversation(conv_id)
+            session = None
+            for s in db.list_sessions_rich(
+                source=None, limit=10000, include_children=False,
+                order_by_last_active=False,
+            ):
+                if s.get("id") == conv_id:
+                    session = s
+                    break
+        finally:
+            db.close()
+
+        if session is None and not messages:
+            return _error("conversation not found", 404)
+
+        return _ok({
+            "type": "chat",
+            "id": conv_id,
+            "name": (session or {}).get("title") or conv_id,
+            "source": (session or {}).get("source"),
+            "started_at": (session or {}).get("started_at"),
+            "last_active": (session or {}).get("last_active"),
+            "message_count": len(messages),
+            "messages": messages,
+        })
+    except Exception as e:
+        logger.exception("Failed to load conversation detail")
         return _error(str(e), 500)
 
 

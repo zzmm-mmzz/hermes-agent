@@ -3968,6 +3968,7 @@ class APIServerAdapter(BasePlatformAdapter):
                     handle_list_skills,
                     handle_list_job_conversations,
                     handle_job_conversation_detail,
+                    handle_conversation_detail,
                 )
                 from gateway.platforms.intelligence_handlers import (
                     handle_intelligence_list,
@@ -3979,6 +3980,7 @@ class APIServerAdapter(BasePlatformAdapter):
                 self._app.router.add_get("/api/jobs/results/latest", handle_latest_results)
                 self._app.router.add_get("/api/jobs/conversations", handle_list_job_conversations)
                 self._app.router.add_get("/api/jobs/{job_id}/conversation", handle_job_conversation_detail)
+                self._app.router.add_get("/api/conversations/{id}", handle_conversation_detail)
                 self._app.router.add_get("/api/jobs", handle_list_jobs)
                 self._app.router.add_post("/api/jobs", handle_create_job)
                 self._app.router.add_get("/api/jobs/{job_id}", handle_get_job)
