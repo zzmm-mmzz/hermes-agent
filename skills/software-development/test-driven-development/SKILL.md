@@ -1,6 +1,6 @@
 ---
-name: test-driven-development
-description: "TDD: enforce RED-GREEN-REFACTOR, tests before code."
+name: "测试驱动开发"
+description: "TDD：强制 RED-GREEN-REFACTOR，先写测试再写代码。"
 version: 1.1.0
 author: Hermes Agent (adapted from obra/superpowers)
 license: MIT

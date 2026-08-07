@@ -1,6 +1,6 @@
 ---
-name: teams-meeting-pipeline
-description: "Operate the Teams meeting summary pipeline via Hermes CLI — summarize meetings, inspect pipeline status, replay jobs, manage Microsoft Graph subscriptions."
+name: "Teams 会议摘要管道"
+description: "通过 Hermes CLI 操作 Teams 会议摘要管道——总结会议、查看管道状态、重放任务、管理 Microsoft Graph 订阅。"
 version: 1.1.0
 author: Hermes Agent + Teknium
 license: MIT

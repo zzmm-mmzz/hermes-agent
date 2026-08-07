@@ -1,6 +1,6 @@
 ---
-name: heartmula
-description: "HeartMuLa: Suno-like song generation from lyrics + tags."
+name: "HeartMuLa 歌曲生成"
+description: "HeartMuLa：类 Suno 的歌词 + 标签歌曲生成。"
 version: 1.0.0
 platforms: [linux, macos, windows]
 metadata:

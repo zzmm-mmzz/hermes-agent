@@ -1,6 +1,6 @@
 ---
-name: himalaya
-description: "Himalaya CLI: IMAP/SMTP email from terminal."
+name: "Himalaya 邮件"
+description: "Himalaya CLI：终端里收发 IMAP/SMTP 邮件。"
 version: 1.1.0
 author: community
 license: MIT

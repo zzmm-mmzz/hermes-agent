@@ -1,6 +1,6 @@
 ---
-name: writing-plans
-description: "Write implementation plans: bite-sized tasks, paths, code."
+name: "编写实施计划"
+description: "编写实施计划：小任务、路径、代码。"
 version: 1.1.0
 author: Hermes Agent (adapted from obra/superpowers)
 license: MIT

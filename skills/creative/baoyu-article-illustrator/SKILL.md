@@ -1,6 +1,6 @@
 ---
-name: baoyu-article-illustrator
-description: "Article illustrations: type × style × palette consistency."
+name: "文章配图插画"
+description: "文章插画：类型 × 风格 × 调色板一致性。"
 version: 1.57.0
 author: 宝玉 (JimLiu)
 license: MIT

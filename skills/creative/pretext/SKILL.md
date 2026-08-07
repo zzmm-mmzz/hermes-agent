@@ -1,6 +1,6 @@
 ---
-name: pretext
-description: "Use when building creative browser demos with @chenglou/pretext — DOM-free text layout for ASCII art, typographic flow around obstacles, text-as-geometry games, kinetic typography, and text-powered generative art. Produces single-file HTML demos by default."
+name: "Pretext 文本布局"
+description: "用 @chenglou/pretext 构建创意浏览器演示——无 DOM 文本布局、ASCII 艺术、绕障碍排版、文本几何游戏、动态排版。"
 version: 1.0.0
 author: Hermes Agent
 license: MIT

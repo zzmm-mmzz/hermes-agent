@@ -1,6 +1,6 @@
 ---
-name: arxiv
-description: "Search arXiv papers by keyword, author, category, or ID."
+name: "arXiv 论文搜索"
+description: "按关键词、作者、类别或 ID 搜索 arXiv 论文。"
 version: 1.0.0
 author: Hermes Agent
 license: MIT

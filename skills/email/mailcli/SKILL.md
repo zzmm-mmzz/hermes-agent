@@ -1,6 +1,6 @@
 ---
-name: mailcli
-description: "POP3/SMTP 邮件收发工具。当用户要求收发邮件时使用此工具。仅支持 POP3 收件（不支持 IMAP），"
+name: "邮件收发工具"
+description: "POP3/SMTP 邮件收发工具。当用户要求收发邮件时使用此工具。仅支持 POP3 收件（不支持 IMAP）。"
 version: 1.0.0
 author: mailcli
 platforms: [linux, macos, windows]

@@ -1,6 +1,6 @@
 ---
-name: requesting-code-review
-description: "Pre-commit review: security scan, quality gates, auto-fix."
+name: "代码审查请求"
+description: "提交前审查：安全扫描、质量门禁、自动修复。"
 version: 2.0.0
 author: Hermes Agent (adapted from obra/superpowers + MorAlekss)
 license: MIT

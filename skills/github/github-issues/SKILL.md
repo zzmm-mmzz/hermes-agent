@@ -1,6 +1,6 @@
 ---
-name: github-issues
-description: "Create, triage, label, assign GitHub issues via gh or REST."
+name: "GitHub Issue 管理"
+description: "创建、分类、打标签、分配 GitHub Issue（gh 或 REST）。"
 version: 1.1.0
 author: Hermes Agent
 license: MIT

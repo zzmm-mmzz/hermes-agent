@@ -1,6 +1,6 @@
 ---
-name: google-workspace
-description: "Gmail, Calendar, Drive, Docs, Sheets via gws CLI or Python."
+name: "Google 工作区"
+description: "通过 gws CLI 或 Python 使用 Gmail、日历、云盘、文档、表格。"
 version: 1.1.0
 author: Nous Research
 license: MIT

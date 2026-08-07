@@ -1,6 +1,6 @@
 ---
-name: polymarket
-description: "Query Polymarket: markets, prices, orderbooks, history."
+name: "Polymarket 预测市场"
+description: "查询 Polymarket：市场、价格、订单簿、历史。"
 version: 1.0.0
 author: Hermes Agent + Teknium
 tags: [polymarket, prediction-markets, market-data, trading]

@@ -1,6 +1,6 @@
 ---
-name: jupyter-live-kernel
-description: "Iterative Python via live Jupyter kernel (hamelnb)."
+name: "Jupyter 实时内核"
+description: "通过实时 Jupyter 内核（hamelnb）进行迭代式 Python 开发。"
 version: 1.0.0
 author: Hermes Agent
 license: MIT

@@ -1,6 +1,6 @@
 ---
-name: baoyu-comic
-description: "Knowledge comics (知识漫画): educational, biography, tutorial."
+name: "知识漫画"
+description: "知识漫画：教育、传记、教程题材。"
 version: 1.56.1
 author: 宝玉 (JimLiu)
 license: MIT

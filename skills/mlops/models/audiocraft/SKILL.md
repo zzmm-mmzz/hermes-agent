@@ -1,6 +1,6 @@
 ---
-name: audiocraft-audio-generation
-description: "AudioCraft: MusicGen text-to-music, AudioGen text-to-sound."
+name: "AudioCraft 音频生成"
+description: "AudioCraft：MusicGen 文生音乐、AudioGen 文生音效。"
 version: 1.0.0
 author: Orchestra Research
 license: MIT

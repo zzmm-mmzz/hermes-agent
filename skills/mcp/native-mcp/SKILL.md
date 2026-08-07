@@ -1,6 +1,6 @@
 ---
-name: native-mcp
-description: "MCP client: connect servers, register tools (stdio/HTTP)."
+name: "原生 MCP 客户端"
+description: "MCP 客户端：连接服务器、注册工具（stdio/HTTP）。"
 version: 1.0.0
 author: Hermes Agent
 license: MIT

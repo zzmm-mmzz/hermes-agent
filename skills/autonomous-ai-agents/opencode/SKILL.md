@@ -1,6 +1,6 @@
 ---
-name: opencode
-description: "Delegate coding to OpenCode CLI (features, PR review)."
+name: "OpenCode 代理"
+description: "委派编码任务给 OpenCode CLI（功能开发、PR 审查）。"
 version: 1.2.0
 author: Hermes Agent
 license: MIT

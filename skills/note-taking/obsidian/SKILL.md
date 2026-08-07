@@ -1,6 +1,6 @@
 ---
-name: obsidian
-description: Read, search, create, and edit notes in the Obsidian vault.
+name: "Obsidian 笔记"
+description: "读取、搜索、创建、编辑 Obsidian 库中的笔记。"
 platforms: [linux, macos, windows]
 ---
 

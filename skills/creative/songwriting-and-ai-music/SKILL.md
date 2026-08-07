@@ -1,6 +1,6 @@
 ---
-name: songwriting-and-ai-music
-description: "Songwriting craft and Suno AI music prompts."
+name: "写歌与 AI 音乐"
+description: "写歌技巧和 Suno AI 音乐提示词。"
 tags: [songwriting, music, suno, parody, lyrics, creative]
 platforms: [linux, macos, windows]
 triggers:

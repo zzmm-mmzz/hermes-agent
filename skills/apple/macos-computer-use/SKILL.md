@@ -1,11 +1,6 @@
 ---
-name: macos-computer-use
-description: |
-  Drive the macOS desktop in the background — screenshots, mouse, keyboard,
-  scroll, drag — without stealing the user's cursor, keyboard focus, or
-  Space. Works with any tool-capable model. Load this skill whenever the
-  `computer_use` tool is available.
-version: 1.0.0
+name: "macOS 电脑控制"
+description: "后台操控 macOS 桌面——截图、鼠标、键盘、滚动、拖拽，不抢占用户光标。适用于任意支持工具调用的模型。当 computer_use 工具可用时加载本技能。"
 platforms: [macos]
 metadata:
   hermes:

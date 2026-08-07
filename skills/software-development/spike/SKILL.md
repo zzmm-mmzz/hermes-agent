@@ -1,6 +1,6 @@
 ---
-name: spike
-description: "Throwaway experiments to validate an idea before build."
+name: "技术验证实验"
+description: "一次性实验：在正式构建前验证想法。"
 version: 1.0.0
 author: Hermes Agent (adapted from gsd-build/get-shit-done)
 license: MIT

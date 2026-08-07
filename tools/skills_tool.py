@@ -1003,6 +1003,21 @@ def skill_view(
                 if found_skill_md.parent.name == name:
                     _record(found_skill_md.parent, found_skill_md)
 
+            # Strategy 2b: recursive by frontmatter name (supports localized
+            # display names — e.g. calling skill_view("ASCII艺术") resolves to
+            # the on-disk directory "ascii-art" whose frontmatter name matches).
+            if not candidates:
+                for found_skill_md in iter_skill_index_files(search_dir, "SKILL.md"):
+                    try:
+                        fm, _ = _parse_frontmatter(
+                            found_skill_md.read_text(encoding="utf-8")[:4000]
+                        )
+                    except Exception:
+                        continue
+                    if str(fm.get("name", "")).strip() == name:
+                        _record(found_skill_md.parent, found_skill_md)
+                        break
+
             # Strategy 3: legacy flat <name>.md files anywhere under the dir.
             for found_md in search_dir.rglob(f"{name}.md"):
                 if found_md.name != "SKILL.md":

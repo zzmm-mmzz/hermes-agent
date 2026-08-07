@@ -1,6 +1,6 @@
 ---
-name: humanizer
-description: "Humanize text: strip AI-isms and add real voice."
+name: "文本人性化"
+description: "文本人性化：去除 AI 腔调，加入真实语气。"
 version: 2.5.1
 author: Siqi Chen (@blader, https://github.com/blader/humanizer), ported by Hermes Agent
 license: MIT

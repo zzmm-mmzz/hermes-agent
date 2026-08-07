@@ -1,6 +1,6 @@
 ---
-name: sketch
-description: "Throwaway HTML mockups: 2-3 design variants to compare."
+name: "快速原型草图"
+description: "一次性 HTML 线框图：2-3 个设计变体对比。"
 version: 1.0.0
 author: Hermes Agent (adapted from gsd-build/get-shit-done)
 license: MIT

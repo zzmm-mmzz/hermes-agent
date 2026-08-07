@@ -1,6 +1,6 @@
 ---
-name: architecture-diagram
-description: "Dark-themed SVG architecture/cloud/infra diagrams as HTML."
+name: "架构图绘制"
+description: "深色主题 SVG 架构/云/基础设施图，输出为 HTML。"
 version: 1.0.0
 author: Cocoon AI (hello@cocoon-ai.com), ported by Hermes Agent
 license: MIT

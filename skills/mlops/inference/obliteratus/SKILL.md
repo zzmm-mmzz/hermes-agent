@@ -1,6 +1,6 @@
 ---
-name: obliteratus
-description: "OBLITERATUS: abliterate LLM refusals (diff-in-means)."
+name: "OBLITERATUS 消融"
+description: "OBLITERATUS：消融 LLM 拒绝行为（diff-in-means）。"
 version: 2.0.0
 author: Hermes Agent
 license: MIT
