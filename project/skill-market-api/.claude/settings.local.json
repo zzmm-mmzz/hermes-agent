@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python -c \"from skill_market_api import make_app, scan_local_skills, get_hermes_home; print\\('导入成功'\\); print\\('HERMES_HOME:', get_hermes_home\\(\\)\\); print\\('SKILLS_DIR 存在:', __import__\\('skill_market_api'\\).SKILLS_DIR.exists\\(\\)\\)\")",
+      "Bash(python -c \"import aiohttp; import yaml; print\\(''依赖检查通过''\\)\")",
+      "Bash(pip list:*)",
+      "Bash(pip cache:*)",
+      "Bash(powershell -NoProfile -Command \"try { \\\\$r = Invoke-WebRequest -Uri 'http://127.0.0.1:8643/health' -UseBasicParsing; Write-Output \\\\$r.Content } catch { Write-Output \\\\$_.Exception.Message }\" 2>&1)",
+      "Bash(\"C:\\\\.hermes\\\\hermes-agent\\\\venv\\\\Scripts\\\\python.exe\" -c \"import sys; sys.path.insert\\(0, 'C:\\\\\\\\.hermes\\\\\\\\hermes-agent'\\); from hermes_agent.config import settings; print\\(settings.skillhub\\)\" 2>&1)",
+      "Read(//c/.hermes/**)",
+      "Read(//c/.hermes/hermes-agent/**)",
+      "Bash(\"C:\\\\.hermes\\\\hermes-agent\\\\venv\\\\Scripts\\\\python.exe\" \"E:\\\\skill-market-api\\\\skill_market_api.py\" 8643)",
+      "Bash(curl -s http://127.0.0.1:8643/health)",
+      "Bash(python:*)",
+      "Bash(curl -s -o /dev/null -w \"含/api/v1: HTTP %{http_code}\\\\n\" \"http://22.56.118.56:18095/api/v1/client/skills/list\")",
+      "Bash(curl -s -o /dev/null -w \"不含/api/v1: HTTP %{http_code}\\\\n\" \"http://22.56.118.56:18095/client/skills/list\")",
+      "Bash(curl:*)",
+      "Bash(kill -9 22384)",
+      "Bash(xargs -r kill -9)",
+      "Bash(netstat -ano)",
+      "Bash(\"C:\\\\.hermes\\\\hermes-agent\\\\venv\\\\Scripts\\\\python.exe\" skill_market_api.py 8643)",
+      "Bash(for dir:*)",
+      "Bash(do echo:*)",
+      "Bash(done)",
+      "Bash(C:/Users/Administrator/AppData/Local/Programs/Python/Python311/Scripts/pip.exe download:*)",
+      "Bash(C:/.hermes/hermes-agent/venv/Scripts/python.exe -c \"import aiohttp; import yaml; print\\(''aiohttp OK''\\); print\\(''yaml OK''\\)\")"
+    ]
+  }
+}

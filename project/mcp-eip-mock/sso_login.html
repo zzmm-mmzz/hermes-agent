@@ -1,0 +1,307 @@
+<!DOCTYPE html><html lang="en">
+
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta http-equiv="X-UA-Compatible" content="ie=edge"><link rel="stylesheet" href="/isc_sso/themes/css/common.css?v=20260204"><link type="text/css" rel="stylesheet" href="/isc_sso/themes/images/iconfont/iconfont.css?v=20260204"><link id="main-css" type="text/css" rel="stylesheet" href="/isc_sso/themes/css/login-dynamic.css?v=20260204"><link type="text/css" rel="stylesheet" href="/isc_sso/themes/css/verify.css?v=20260204"><!-- 引入jq --><script type="text/javascript">
+    function initLoad() {
+      setCookieUsername();
+      var theAuthMode = $("#theAuthMode").val();
+      switch (theAuthMode) {
+        case 'ACCOUNT_PASSWORD':
+          $(".login-password").addClass("opp");
+          $("#login-password").addClass("on a-hover");
+          break;
+        case 'SMS':
+          $(".login-message").addClass("opp");
+          $("#login-message").addClass("on a-hover");
+          break;
+        case 'UKEY':
+          $(".login-ukey").addClass("opp");
+          $("#login-ukey").addClass("on a-hover");
+          break;
+        case 'FACE':
+          displayFaceLogin();
+          $(".login-face").addClass("opp");
+          $("#login-face").addClass("on a-hover");
+          break;
+        case 'QR_CODE':
+          msg.style.display="none";
+          qr.style.display="block";
+          getQid();
+          break;
+        default:
+      }
+      // 如果配置了人脸登录，检查是否安装客户端，未安装客户端则不展示此登录方式
+      var hasFace = false;
+      if (hasFace){
+        checkEnvInfo();
+      }
+
+    }
+    function isIE8() {
+      var DEFAULT_VERSION = 8.0;
+      var ua = window.navigator.userAgent.toLowerCase();
+      var isIE = ua.indexOf("msie") > -1;
+      var safariVersion;
+      if (isIE){
+        safariVersion = ua.match(/msie ([\d.]+)/)[1];
+      }
+      if (safariVersion <= DEFAULT_VERSION){
+        return true
+      }
+    }
+  </script>
+  <script type="text/javascript" src="/isc_sso/themes/common/jquery/jquery.js?v=20260204"></script>
+  <script type="text/javascript" src="/isc_sso/themes/common/jquery/jquery.placeholder.js?v=20260204"></script>
+  <script type="text/javascript" src="/isc_sso/themes/common/jquery/jquery.xdomainrequest.min.js?v=20260204"></script>
+  <script type="text/javascript" src="/isc_sso/themes/common/cookie.js?v=20260204"></script>
+  <link rel="icon" href="themes/images/dynamic/title-icon.png" type="images/x-ico" /><title>统一认证服务</title>
+  <script type="text/javascript">
+    // IE89跨域问题解决
+    jQuery.support.cors = true;
+  </script>
+</head>
+
+<body onload="initLoad();">
+  <div class="login">
+    <img src="themes/images/dynamic/background.png" class="img-background" onerror="this.src='themes/images/dynamic/background.png'"
+      alt="未获取到背景图"><div class="login_contentl">
+      <img src="themes/images/dynamic/texture.png" class="img-texture"
+        onerror="this.src='themes/images/dynamic/texture.png'" alt="未获取到底纹"><img src="themes/images/dynamic/isc-logo.png" class="img-logo"
+        onerror="this.src='themes/images/dynamic/isc-logo.png'" alt="未获取到logo"><h2 style="position: fixed;color: white;top: 7%;left: 47%"></h2>
+      <div class="login-record msg">
+
+        <!--~~~~~~~~~~~~~~~~~~~~~弹出提醒对话框~~~~~~~~~~~~~~~~~~~~~--><!--预登陆检查对话框--><!DOCTYPE html><html lang="en">
+<head>
+    <meta charset="UTF-8"><title>dialog</title>
+    <link type="text/css" rel="stylesheet" href="/isc_sso/themes/css/dialog.css?v=20260204"></head>
+<body>
+    <!--当前重定向地址--><input type="hidden" id="theRedirectUri" value="http://eip.hn.sgcc.com.cn/portal/portal_um/rest/login/D1FF365EBABC7A809157F96ECEDE995E" /><!--是否开启预登陆检查--><input type="hidden" id="isPreLoginCheck" value="false" /><!--账号委托登陆检查弹窗--><!DOCTYPE html><html lang="en">
+<head>
+    <meta charset="UTF-8"><title>entrust</title>
+    <style type="text/css">
+        h2.title {
+            margin: 10px 0 15px;
+            text-align: left;
+            font-size: 14px;
+        }
+        .entrust-modal{
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1001;
+            width: 100%;
+            height: 100vh;
+            background: rgba(0, 0, 0, .3);
+            transition: all .5s;
+            display: none;
+        }
+        .entrust-box {
+            position: relative;
+            padding: 10px;
+            left: 67%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            background: #fff;
+            width: 319px;
+            height: 350px;
+            box-shadow: 0 0 8px 3px rgba(0, 0, 0, 0.3);
+            z-index: 2000;
+            border-radius: 5px;
+            border: 1px solid #e4e7eb;
+        }
+        .master-div{
+            overflow-y: auto;
+            height: 100px;
+        }
+        .radio-group{
+            display: flex;
+            align-items: center;
+        }
+        .radio-group input[type="radio"] {
+            margin-right: 10px;
+            width: auto;
+            height: auto;
+        }
+        .radio-group label{
+            font-size: 14px;
+        }
+        .entrust-btns {
+            position: absolute;
+            bottom: 10px;
+            left: 69px
+        }
+        .btn{
+            padding: 10px 20px;
+            margin-right: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 84px;
+        }
+    </style>
+</head>
+<body>
+    <!--对话框--><div id="entrust-dialog" class="entrust-modal">
+        <div id="entrust-div" class="entrust-box" >
+            <h2 class="title">请选择您要登录的账号</h2>
+            <p style="color: grey;font-size: 11px;">您的账号已经被其他账号授权,您可以选择登录授权账号</p>
+            <p style="color: grey;font-size: 11px;margin-top: 20px;">您的账号</p>
+            <div class="radio-group">
+                <input type="radio" id="slaveName" name="choice" value="slave-choice" checked/><label id="slaveDisplayName"></label>
+            </div>
+            <p style="color: grey;font-size: 11px;margin-top: 20px;">授权给您的账号</p>
+            <div id="master-radio-div" class="master-div">
+
+            </div>
+            <div class="entrust-btns">
+                <button class="btn" style="background-color: #00adff;color: white;" onclick="submitEntrust();">确认</button>
+                <button class="btn" style="background-color: #6c757d;" onclick="submitCancel();">取消</button>
+            </div>
+        </div>
+    </div>
+    <script type="text/javascript" src="/isc_sso/themes/js/entrust.js?v=20260204"></script>
+</body>
+</html>
+    <!--对话框--><div id="dialog" class="modal">
+        <!--对话框内容--><div class="modal-content">
+            <div class="modal-msg">
+<!--                <p class="msg">你的账号有效期即将过期,请及时续期!<a href="http://123.com" class="opt-btn">立即续期</a></p>--><!--                <p class="msg">你的密码有效期即将过期,请及时修改密码!<a href="http://123.com" class="opt-btn">立即修改</a></p>--></div>
+            <div class="modal-bottom">
+                <button class="sure" id="sure">已知晓,直接登录<span>(</span><span id="time">10</span><span>)</span></button>
+            </div>
+        </div>
+    </div>
+    <script type="text/javascript" src="/isc_sso/themes/js/dialog.js?v=20260204"></script>
+</body>
+</html>
+
+        <input id="app-type" type="hidden" value="mx" /><!--登录方式--><div class="btns clearfix " id="login-mode-a">
+          <a href="#" id="login-password" class="fl on a-hover" onclick="loginModeChange('login-password')">密码登录</a>
+          </div>
+        <!--切换扫码--><!--当前认证方式--><input type="hidden" id="theAuthMode" value="" /><!-- ~~~~~~~~~~~~~~~~~~~~~账号密码登陆~~~~~~~~~~~~~~~~~~~~~--><div class="login-password logining opp">
+          <form method="post" id="fm1" class="login-form" autocomplete="off">
+            <input type="hidden" name="appId" value="8a5f81dc7fcfcbe40180081855111c0c" /><input type="hidden" name="authMode" id="apAuthMode" value="ACCOUNT_PASSWORD" /><!--账号--><div class="login-img">
+              <div class="user-icon"></div>
+              <input id="user_tag_encrypt" type="hidden" name="username"><input id="user_tag" type="text" maxlength="50" placeholder="请输入您的账号"
+                class="login-user" onkeydown="if(event.keyCode==13){submitApLogin()}"><input class="remember-box" type="checkbox" id="checkAcc" name="checkAcc" title="记住账号" /></div>
+            <!--密码--><div class="login-img">
+              <div class="password-icon"></div>
+              <input id="user_pwd_encrypt" type="hidden" name="password"><div id="pd">
+                <input id="user_pd" type="password" maxlength="50" class="login-pwd" autocomplete="off"
+                  placeholder="请输入您的密码" onkeydown="if(event.keyCode==13){submitApLogin()}"></div>
+              <div class="login-eyes"></div>
+            </div>
+            <!--多因子认证：通讯号码，传递信息的手机号/邮箱--><!--多因子认证：手机或邮箱验证码--><!--选择单位--><!--验证码--><input type="hidden" name="captchaPattern" value="embed" /><!--滑动弹出式验证码--><!--提示--><div class="tips-box tips" id="getApVerifyCodeMsg"></div>
+            <input type="hidden" name="execution" value="e2s1" /><input type="hidden" name="_eventId" value="submit" /><input type="hidden" name="messageCode" id="messageCode"/><button type="button" class="login-btn" id="submi" onclick="submitApLogin()"><a href="#">立即登录</a></button>
+
+            <!--忘记密码/修改密码等--><div class="login-footer clearfix">
+              <input type="hidden" id="forget-pwd-url" value="http://tyqxiscsso.hn.sgcc.com.cn:38080/isc_sso_proxy/province/resetPwd?redirect_uri=http://eip.hn.sgcc.com.cn/portal/portal_um/rest/login/D1FF365EBABC7A809157F96ECEDE995E&amp;digest=DAFA4D6BE5830C21972B121621ECA75F0871D4982DC82C2C30256666AB6D2DA5" /><a id="forget-pwd" href="http://tyqxiscsso.hn.sgcc.com.cn:38080/isc_sso_proxy/province/resetPwd?redirect_uri=http://eip.hn.sgcc.com.cn/portal/portal_um/rest/login/D1FF365EBABC7A809157F96ECEDE995E&amp;digest=DAFA4D6BE5830C21972B121621ECA75F0871D4982DC82C2C30256666AB6D2DA5" class="fr mr-1 a-btn" style="margin-right: 6%;">忘记密码</a>
+              <input type="hidden" id="modify-pwd-url" value="" /><input type="hidden" id="account-activation-url" value="" /><input type="hidden" id="account-renewal-url" value="" /><input type="hidden" id="account-to-official-url" value="" /><input type="hidden" id="account-register-url" value="" /><!-- 青海自定义挂载 申请单 --></div>
+          </form>
+        </div>
+        <!-- ~~~~~~~~~~~~~~~~~~~~~手机短信登陆~~~~~~~~~~~~~~~~~~~~~--><!-- ~~~~~~~~~~~~~~~~~~~~~ukey登陆~~~~~~~~~~~~~~~~~~~~~--><div class="service-tel">
+          </div>
+
+
+
+        <!-- ~~~~~~~~~~~~~~~~~~~~~人脸登陆~~~~~~~~~~~~~~~~~~~~~--></div>
+
+
+
+      <!-- ~~~~~~~~~~~~~~~~~~~~~扫码登陆~~~~~~~~~~~~~~~~~~~~~--><!--~~~~~~~~~~~~~~~~~~~~~下载~~~~~~~~~~~~~~~~~~~~~--><div class="login-download">
+        <input type="hidden" id="uk-plug-url" value="" /><input type="hidden" id="browser-chome-url" value="" /><input type="hidden" id="browser-ie-url" value="" /></div>
+
+
+    </div>
+
+  </div>
+  <div id="loading" style="position:absolute;top:50%;left:50%;z-index:29;"></div>
+
+
+  <div id="_aostarit_view_encrypt_type_">
+    <script type="text/javascript" src="/isc_sso/themes/common/encrypt/sm_encrypt.js?v=20260204"></script>
+    <script type="text/javascript" src="/isc_sso/themes/common/encrypt/RsaUtils.js?v=20260204"></script>
+    <script type="text/javascript" src="/isc_sso/themes/common/encrypt/jquery.md5.js?v=20260204"></script>
+    <script type="text/javascript" src="/isc_sso/themes/common/encrypt/aostaritEncrypt.js?v=20260204"></script>
+    <script type="text/javascript" src="/isc_sso/themes/js/qrcode.js?v=20260204"></script>
+    <script type="text/javascript">
+      // 传输加密初始化
+      var options = {
+        encryptKey: "00a767ca54db607dc96e5d69c60bf16f3878139ae4ecb4101912da759eaa6ee963aee8efc78a22fe413674480e1dc2168ab36f0153ac8b575e44b3f8fc0621958717ba1aef7a0b977f46a54044e71add31cb5e5534996de016c9a3600de424f6dbd6d0b9d335c26ca3083c53f21f37903cf576ca7fd1ea82f37fe0f1f4c884b3bb#010001",
+        smPass: false,
+        isIE8: true
+      };
+      aostaritEncryptUtils.init(options);
+      // 二维码接口地址初始化
+      var qrcodeApi = {
+        qrcodeGetId: null,
+        qrcodeShow: null,
+        qrcodeCheck: null
+      };
+      qrcodeUrls.init(qrcodeApi);
+    </script>
+  </div>
+
+
+  <!-- 自己当前的js引用 --><script src="/isc_sso/themes/js/login.js?v=20260204"></script>
+  <script src="/isc_sso/themes/js/face.js?v=20260204"></script>
+  <script src="/isc_sso/themes/js/captcha/crypto-js.js?v=20260204"></script>
+  <script src="/isc_sso/themes/js/captcha/ase.js?v=20260204"></script>
+  <script src="/isc_sso/themes/js/captcha/verify.js?v=20260204"></script>
+  <script type="text/javascript">
+    //ie8兼容
+    $("input").placeholder()
+    if (!String.prototype.trim) {
+      String.prototype.trim = function () {
+        return this.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '')
+      }
+    }
+
+    var captchaEmbed = $('#captcha_embed').val();
+    var captchaPopup = $('#captcha_popup').val();
+    // console.log("captchaEmbed: "+captchaEmbed);
+    // console.log("captchaPopup: "+captchaPopup);
+
+
+
+    if (captchaPopup){
+      // 初始化验证码  弹出式
+      $('#slider-popup-captcha').slideVerify({
+        //baseUrl:'https://captcha.anji-plus.com/captcha-api',  //服务器请求地址, 默认地址为安吉服务器;
+        baseUrl:'',  //服务器请求地址, 默认地址为安吉服务器;
+        mode:'pop',     //展示模式
+        containerId:'submi',//pop模式 必填 被点击之后出现行为验证码的元素id
+        keydownId: ['user_tag','user_pd'],//选填,键盘按下"回车键"之后出现行为验证码的元素id
+        imgSize : {       //图片的大小对象,有默认值{ width: '310px',height: '155px'},可省略
+          width: '400px',
+          height: '200px',
+        },
+        barSize:{          //下方滑块的大小对象,有默认值{ width: '310px',height: '50px'},可省略
+          width: '400px',
+          height: '40px',
+        },
+        beforeCheck:function(){  //检验参数合法性的函数  mode ="pop"有效
+          //实现: 参数合法性的判断逻辑, 返回一个boolean值
+          return apLoginCheck();
+        },
+        ready : function() {},  //加载完毕的回调
+        success : function(params) { //成功的回调
+          // params为返回的二次验证参数 需要在接下来的实现逻辑回传服务器
+          // 例如: login($.extend({}, params))
+          // console.log(params.captchaVerification);
+          $('#captcha_slider').val(params.captchaVerification);
+          formSubmit("fm1");
+        },
+        error : function() {}        //失败的回调
+      });
+    }
+    if (encryptOptions.options.isIE8){
+      // 刷新页面时,图形验证码接口加防重放参数
+      // $('#img_display_verify_code_pic').attr("src", "getPictureCheckCodeImage?" + replayAttackParam());
+      refreshPicture()
+    }
+  </script>
+
+</body>
+
+</html>

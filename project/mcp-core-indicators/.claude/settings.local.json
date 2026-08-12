@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(netstat -ano)",
+      "Bash(curl -s -X POST http://localhost:8100/tools/indicators -H \"Content-Type: application/json\" -d '{\"\"name\"\": \"\"list_indicators\"\", \"\"arguments\"\": {\"\"list\"\": \"\"all\"\"}}')",
+      "Bash(kill -9 13752)",
+      "Bash(taskkill:*)",
+      "PowerShell(Stop-Process:*)",
+      "PowerShell(netstat:*)",
+      "Bash(curl -s -X POST http://localhost:8100/tools/indicators -H \"Content-Type: application/json\" -d '{\"\"name\"\": \"\"query_core_indicators\"\", \"\"arguments\"\": {\"\"login_name\"\": \"\"testuser\"\", \"\"codes\"\": [\"\"10029b\"\", \"\"10030\"\"]}}')",
+      "Bash(curl:*)"
+    ]
+  }
+}

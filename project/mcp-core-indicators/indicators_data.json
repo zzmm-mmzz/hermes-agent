@@ -1,0 +1,30 @@
+[
+  {
+    "code": "10029b",
+    "name": "台区实时停电数",
+    "url": null,
+    "isHide": false,
+    "sortOrder": 1
+  },
+  {
+    "code": "10030",
+    "name": "当日报修次数",
+    "url": null,
+    "isHide": false,
+    "sortOrder": 2
+  },
+  {
+    "code": "10020",
+    "name": "综合线损率",
+    "url": null,
+    "isHide": false,
+    "sortOrder": 3
+  },
+  {
+    "code": "67851",
+    "name": "安全运行天数",
+    "url": "/plan/safeConfig/selectSafeDayByOrgCode",
+    "isHide": false,
+    "sortOrder": 4
+  }
+]

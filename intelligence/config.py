@@ -1,4 +1,4 @@
-"""Configuration for intelligence center integration."""
+"""Configuration for intelligence center integration (XiangDian LiaoWang data source)."""
 import os
 import tomllib
 from pathlib import Path
@@ -7,40 +7,35 @@ from dataclasses import dataclass
 
 @dataclass
 class IntelligenceConfig:
-    """情报中心配置"""
-    base_url: str = "http://127.0.0.1:10010"
-    client_id: str = ""
-    client_secret: str = ""
+    """湘电瞭望数据源配置"""
+    base_url: str = "http://25.212.193.27:18080"
+    app_key: str = ""
+    app_name: str = "XDLW_THRID_10_AUTH"
+    isc: str = "XDLW_THRID_10_AUTH"
 
     @property
     def token_url(self) -> str:
-        return f"{self.base_url}/api/auth/token"
+        return f"{self.base_url}/upms/thrid/authorize"
 
     @property
     def list_url(self) -> str:
-        return f"{self.base_url}/api/intelligence/list"
-
-    @property
-    def detail_url(self) -> str:
-        return f"{self.base_url}/api/intelligence/detail"
-
-    @property
-    def categories_url(self) -> str:
-        return f"{self.base_url}/api/intelligence/categories"
+        return f"{self.base_url}/qbzx/article/recommendNew"
 
 
 def load_config() -> IntelligenceConfig:
-    """加载情报中心配置"""
+    """加载湘电瞭望配置"""
     # 优先从环境变量读取（Docker 部署用）
-    env_base_url = os.environ.get("INTELLIGENCE_BASE_URL")
-    env_client_id = os.environ.get("INTELLIGENCE_CLIENT_ID")
-    env_client_secret = os.environ.get("INTELLIGENCE_CLIENT_SECRET")
+    env_base_url = os.environ.get("XDLW_BASE_URL")
+    env_app_key = os.environ.get("XDLW_APP_KEY")
+    env_app_name = os.environ.get("XDLW_APP_NAME")
+    env_isc = os.environ.get("XDLW_ISC")
 
     if env_base_url:
         return IntelligenceConfig(
             base_url=env_base_url,
-            client_id=env_client_id or "",
-            client_secret=env_client_secret or "",
+            app_key=env_app_key or "",
+            app_name=env_app_name or "XDLW_THRID_10_AUTH",
+            isc=env_isc or "XDLW_THRID_10_AUTH",
         )
 
     # 其次从 config.toml 读取
@@ -56,8 +51,9 @@ def load_config() -> IntelligenceConfig:
                 cfg = data.get("intelligence", {})
                 return IntelligenceConfig(
                     base_url=cfg.get("base_url", IntelligenceConfig.base_url),
-                    client_id=cfg.get("client_id", IntelligenceConfig.client_id),
-                    client_secret=cfg.get("client_secret", IntelligenceConfig.client_secret),
+                    app_key=cfg.get("app_key", IntelligenceConfig.app_key),
+                    app_name=cfg.get("app_name", IntelligenceConfig.app_name),
+                    isc=cfg.get("isc", IntelligenceConfig.isc),
                 )
             except Exception:
                 pass

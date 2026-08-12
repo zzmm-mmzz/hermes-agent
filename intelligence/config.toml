@@ -1,5 +1,6 @@
 [intelligence]
-# 情报中心服务配置
-base_url = "http://127.0.0.1:10010"
-client_id = ""
-client_secret = ""
+# 湘电瞭望数据源配置
+base_url = "http://25.212.193.27:18080"
+app_key = "d3fd74882c309670a14eed841c31184d3869ce1fef2bf0597b63547edd03da03"
+app_name = "XDLW_THRID_10_AUTH"
+isc = "XDLW_THRID_10_AUTH"
