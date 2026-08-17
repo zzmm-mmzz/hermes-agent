@@ -1,0 +1,19 @@
+[indicators]
+# 指标数据源平台（真实指标服务）
+platform_base_url = "http://22.56.118.69:8086"
+
+# 指标管理后端（t_indicator 存储，MVP-Base-Manage skill-hub 服务）
+backend_base_url = "http://localhost:18082"
+backend_api_prefix = "/indicators"
+
+# 认证方式（指标平台）：login-name 头 + md5(login_name) 作为 Authorization
+auth_mode = "login_md5"   # login_md5 | none
+
+# 脚本本地应用目录（容器挂载卷 ~/.hermes/custom_indicators，重建不丢）
+scripts_dir = "~/.hermes/custom_indicators"
+
+# 区域名称映射文件（随引擎迁移保留，相对 hermes-agent 根目录）
+area_js_path = "project/mcp-core-indicators/area.js"
+
+# 登录上下文缓存开关（同一用户只拉一次 org_no/area）
+cache_login_context = true

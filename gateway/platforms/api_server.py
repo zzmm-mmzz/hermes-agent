@@ -685,7 +685,13 @@ class APIServerAdapter(BasePlatformAdapter):
             "ssl_keyfile", os.getenv("API_SERVER_SSL_KEYFILE", "")
         )
         self._cors_origins: tuple[str, ...] = self._parse_cors_origins(
-            extra.get("cors_origins", os.getenv("API_SERVER_CORS_ORIGINS", "")),
+            extra.get(
+                "cors_origins",
+                os.getenv(
+                    "API_SERVER_CORS_ORIGINS",
+                    "http://localhost:9527,http://127.0.0.1:9527",
+                ),
+            ),
         )
         self._model_name: str = self._resolve_model_name(
             extra.get("model_name", os.getenv("API_SERVER_MODEL_NAME", "")),
@@ -4065,6 +4071,32 @@ class APIServerAdapter(BasePlatformAdapter):
                 logger.info("[%s] Skill Market API routes registered", self.name)
             except Exception:
                 logger.warning("[%s] Skill Market API routes not available (skill_market_api.py missing or import failed)", self.name)
+
+            # Indicators API (指标管理 & 执行 — indicators/api.py)
+            try:
+                from indicators.api import make_app as _make_indicators_app, init as _init_indicators
+                _init_indicators()
+                _indicators_app = _make_indicators_app()
+                for _route in _indicators_app.router.routes():
+                    _canonical = _route.resource.canonical
+                    if _canonical == "/health":
+                        continue
+                    self._app.router.add_route(
+                        _route.method, _route.resource.canonical,
+                        _route.handler, name=_route.name,
+                    )
+                logger.info("[%s] Indicators API routes registered", self.name)
+            except Exception:
+                logger.warning("[%s] Indicators API routes not available (indicators/api.py missing or import failed)", self.name)
+
+            # Embedded MCP services (mcp-eip-mock:8200 — core-indicators 已迁移为主网关 Indicators API)
+            # 随网关启动自动拉起，无需再单独 python server.py 启动
+            try:
+                from mcp_embed import start_all as _start_mcp_services
+                await _start_mcp_services()
+            except Exception:
+                logger.warning("[%s] Embedded MCP services not started (mcp_embed.py missing or import failed)", self.name)
+
 
             # Structured event streaming
             self._app.router.add_post("/v1/runs", self._handle_runs)
