@@ -4089,8 +4089,25 @@ class APIServerAdapter(BasePlatformAdapter):
             except Exception:
                 logger.warning("[%s] Indicators API routes not available (indicators/api.py missing or import failed)", self.name)
 
-            # Embedded MCP services (mcp-eip-mock:8200 — core-indicators 已迁移为主网关 Indicators API)
-            # 随网关启动自动拉起，无需再单独 python server.py 启动
+            # EIP Mock API (from mcp-eip-mock/server.py via mcp_embed — aiohttp 路由挂载)
+            # 挂载前缀 /api/eip：/api/eip/mail、/api/eip/mcp、/api/eip/tools/<name> 等
+            try:
+                from mcp_embed import make_app as _make_eip_app
+                _eip_app = _make_eip_app(prefix="/api/eip")
+                for _route in _eip_app.router.routes():
+                    _canonical = _route.resource.canonical
+                    if _canonical == "/health":
+                        continue
+                    self._app.router.add_route(
+                        _route.method, _canonical,
+                        _route.handler, name=_route.name,
+                    )
+                logger.info("[%s] EIP Mock API routes registered (prefix /api/eip)", self.name)
+            except Exception:
+                logger.warning("[%s] EIP Mock API routes not available (mcp-eip-mock/server.py missing or import failed)", self.name)
+
+            # Embedded MCP services（mcp-eip-mock 路由已挂载进主网关，此处只负责
+            # 初始化全局状态 + 启动 reminder_loop 后台扫描；不再占用独立端口 8200）
             try:
                 from mcp_embed import start_all as _start_mcp_services
                 await _start_mcp_services()

@@ -1467,6 +1467,334 @@ async def handle_http_request(reader: asyncio.StreamReader, writer: asyncio.Stre
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# 第四点五部分：aiohttp 应用（供主网关挂载复用）
+# ══════════════════════════════════════════════════════════════════════════
+# 主网关 (gateway/platforms/api_server.py) 挂载子应用的方式是：
+#   import 子模块 -> make_app() -> 遍历 router.routes() 逐条 add_route 复制。
+# 本函数返回 aiohttp web.Application，路由 handler 复用上面的业务逻辑：
+#   - 真实代理端点（mail/todo/task-history/refresh/set-credentials）直接 await
+#     业务协程（handle_eip_*），不走 run_coroutine_threadsafe 桥接——因为
+#     aiohttp handler 本身就跑在事件循环上；
+#   - 个人重点事项/提醒端点复用同步 _handle_* 方法（纯内存操作）；
+#   - /mcp 与 /tools/<name> 保持原分发逻辑。
+# prefix 非空时（如 "/api/eip"）注册带前缀路由，避免 /mcp、/tools/<name>
+# 等通用路径与主网关其他路由冲突；独立运行 (python server.py) 不受影响。
+#
+# 注意：make_app() 不启动 reminder_loop——挂载模式下由 mcp_embed.start_all()
+# 负责启动后台扫描协程（aiohttp 的 on_startup 钩子在路由复制挂载时不会触发）。
+
+
+def make_app(prefix: str = "") -> "web.Application":
+    """构建 aiohttp web.Application（供主网关挂载复用）。
+
+    Args:
+        prefix: 路由前缀，如 "/api/eip"。空串则注册原始路径（独立运行兼容）。
+    """
+    import aiohttp
+    from aiohttp import web
+
+    if mcp_server is None:
+        globals()["mcp_server"] = MCPServer()
+
+    app = web.Application()
+
+    def _path(route: str) -> str:
+        """路径拼接：prefix 为空原样返回；非空时去掉 route 的 /api 段再拼前缀。
+
+        /api/mail + prefix=/api/eip -> /api/eip/mail
+        /mcp       + prefix=/api/eip -> /api/eip/mcp
+        """
+        if not prefix:
+            return route
+        if route.startswith("/api/"):
+            route = route[len("/api"):]
+        return f"{prefix}{route}"
+
+    def _cors_headers(resp: web.Response) -> web.Response:
+        """保持与原独立服务一致的 CORS 头（api_server 挂载路由无全局 CORS）"""
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+        resp.headers["Access-Control-Max-Age"] = "86400"
+        return resp
+
+    def _json_text(data: dict, status: int = 200) -> web.Response:
+        """dict -> JSON 响应（ensure_ascii=False + indent=2，与原 REST 端点一致）"""
+        return _cors_headers(web.Response(
+            text=json.dumps(data, ensure_ascii=False, indent=2),
+            status=status,
+            content_type="application/json",
+            charset="utf-8",
+        ))
+
+    def _mcp_text(result: dict, status: int = 200) -> web.Response:
+        """MCP result 壳 -> 取 content[0].text 原样返回（个人笔记/提醒端点用）"""
+        text = result["result"]["content"][0]["text"]
+        return _cors_headers(web.Response(
+            text=text,
+            status=status,
+            content_type="application/json",
+            charset="utf-8",
+        ))
+
+    def _safe(fn):
+        """包装真实代理 handler：异常时返回 500 JSON（与原独立服务 handle_http_request
+        的 try/except 行为一致，而不是 aiohttp 默认的 500 错误页）"""
+        async def wrapper(request) -> web.Response:
+            try:
+                return await fn(request)
+            except Exception as e:
+                return _json_text({"error": str(e)}, status=500)
+        return wrapper
+
+    async def _options_handler(request) -> web.Response:
+        return _cors_headers(web.Response(status=204))
+
+    # ── GET / 服务信息 ──
+    async def index_handler(request) -> web.Response:
+        return _json_text({
+            "server": "EIP 门户集成服务",
+            "version": "2.0.0",
+            "port": MCP_PORT,
+            "endpoints": {
+                "tools": list(mcp_server.tools.keys()),
+                "mcp": "POST /mcp (JSON-RPC)",
+                "tool_endpoint": "POST /tools/<tool_name>",
+                "restful": [
+                    "GET  /api/mail?pageSize=50",
+                    "GET  /api/todo?pageSize=10",
+                    "GET  /api/task-history?pageSize=10",
+                    "POST /api/refresh",
+                    "POST /api/set-credentials",
+                    "GET  /api/personal-notes?keyword=&pageSize=20&pageNo=1",
+                    "POST /api/personal-notes (add)",
+                    "DELETE /api/personal-notes (delete, body: {\"id\":\"...\"})",
+                    "GET  /api/reminders/pending (轮询待确认提醒)",
+                    "POST /api/reminders/ack (body: {\"id\":\"...\"})",
+                ],
+            },
+        })
+
+    # ── 真实代理 REST 端点（直接 await 业务协程）──
+    async def mail_handler(request) -> web.Response:
+        q = request.query
+        page_size = int(q.get("pageSize", 50))
+        page_no = int(q.get("pageNo", 1))
+        status = q.get("status", "")
+        result = await handle_eip_mail(page_size, page_no, status)
+        return _json_text(result)
+
+    async def todo_handler(request) -> web.Response:
+        page_size = int(request.query.get("pageSize", 10))
+        result = await handle_eip_todo(page_size)
+        return _json_text(result)
+
+    async def task_history_handler(request) -> web.Response:
+        q = request.query
+        page_size = int(q.get("pageSize", 10))
+        keyword = q.get("keyword", "")
+        app_id = q.get("appId", "")
+        result = await handle_eip_task_history(page_size, keyword, app_id)
+        return _json_text(result)
+
+    async def refresh_handler(request) -> web.Response:
+        try:
+            post_data = await request.json() if request.body_exists else {}
+        except Exception:
+            post_data = {}
+        username = post_data.get("username", _session["username"])
+        password = post_data.get("password", _session["password"])
+        result = await handle_eip_refresh(username, password)
+        return _json_text(result)
+
+    async def set_credentials_handler(request) -> web.Response:
+        try:
+            post_data = await request.json() if request.body_exists else {}
+        except Exception:
+            post_data = {}
+        username = post_data.get("username", "")
+        password = post_data.get("password", "")
+        result = await handle_eip_set_credentials(username, password)
+        return _json_text(result)
+
+    # ── 个人重点事项 REST 端点（复用同步 _handle_* 方法）──
+    async def notes_list_handler(request) -> web.Response:
+        q = request.query
+        result = mcp_server._handle_list_personal_notes({
+            "keyword": q.get("keyword", ""),
+            "pageSize": int(q.get("pageSize", 20)),
+            "pageNo": int(q.get("pageNo", 1)),
+        })
+        return _mcp_text(result)
+
+    async def notes_add_handler(request) -> web.Response:
+        try:
+            post_data = await request.json() if request.body_exists else {}
+        except Exception:
+            post_data = {}
+        result = mcp_server._handle_add_personal_note(post_data)
+        return _mcp_text(result)
+
+    async def notes_delete_handler(request) -> web.Response:
+        try:
+            post_data = await request.json() if request.body_exists else {}
+        except Exception:
+            post_data = {}
+        result = mcp_server._handle_delete_personal_note(post_data)
+        return _mcp_text(result)
+
+    # ── 提醒 REST 端点（前端轮询用）──
+    async def reminders_pending_handler(request) -> web.Response:
+        result = mcp_server._handle_list_due_reminders({})
+        return _mcp_text(result)
+
+    async def reminders_ack_handler(request) -> web.Response:
+        try:
+            post_data = await request.json() if request.body_exists else {}
+        except Exception:
+            post_data = {}
+        result = mcp_server._handle_ack_reminder(post_data)
+        return _mcp_text(result)
+
+    # ── /mcp JSON-RPC 端点 ──
+    async def mcp_handler(request) -> web.Response:
+        try:
+            body_dict = await request.json()
+        except Exception:
+            return _cors_headers(web.Response(
+                text=json.dumps({"error": {"code": -32700, "message": "Parse error"}}),
+                status=400,
+                content_type="application/json",
+                charset="utf-8",
+            ))
+        result = mcp_server.handle_request(body_dict)
+        return _cors_headers(web.Response(
+            text=json.dumps(result, ensure_ascii=False),
+            content_type="application/json",
+            charset="utf-8",
+        ))
+
+    # ── /tools/<tool_name> 直接调用工具 ──
+    async def tools_handler(request) -> web.Response:
+        tool_name = request.match_info["tool_name"]
+        try:
+            arguments = await request.json() if request.body_exists else {}
+        except Exception:
+            arguments = {}
+
+        # 真实代理工具：直接 await 业务协程（不走 run_coroutine_threadsafe）
+        if tool_name == "get_mail_list":
+            result = await handle_eip_mail(
+                arguments.get("pageSize", 50),
+                arguments.get("pageNo", 1),
+                arguments.get("status", ""),
+            )
+            result = {
+                "result": {
+                    "content": [
+                        {"type": "text", "text": json.dumps(result, ensure_ascii=False, indent=2)}
+                    ],
+                    "isError": not result.get("success", False),
+                }
+            }
+        elif tool_name == "get_todo_list":
+            result = await handle_eip_todo(arguments.get("pageSize", 10))
+            result = {
+                "result": {
+                    "content": [
+                        {"type": "text", "text": json.dumps(result, ensure_ascii=False, indent=2)}
+                    ],
+                    "isError": not result.get("success", False),
+                }
+            }
+        elif tool_name == "get_task_history":
+            result = await handle_eip_task_history(
+                arguments.get("pageSize", 10),
+                arguments.get("keyword", ""),
+                arguments.get("appId", ""),
+            )
+            result = {
+                "result": {
+                    "content": [
+                        {"type": "text", "text": json.dumps(result, ensure_ascii=False, indent=2)}
+                    ],
+                    "isError": not result.get("success", False),
+                }
+            }
+        elif tool_name == "eip_refresh_session":
+            result = await handle_eip_refresh(
+                arguments.get("username", ""),
+                arguments.get("password", ""),
+            )
+            result = {
+                "result": {
+                    "content": [
+                        {"type": "text", "text": json.dumps(result, ensure_ascii=False, indent=2)}
+                    ],
+                    "isError": not result.get("success", False),
+                }
+            }
+        elif tool_name == "eip_set_credentials":
+            result = await handle_eip_set_credentials(
+                arguments.get("username", ""),
+                arguments.get("password", ""),
+            )
+            result = {
+                "result": {
+                    "content": [
+                        {"type": "text", "text": json.dumps(result, ensure_ascii=False, indent=2)}
+                    ],
+                    "isError": not result.get("success", False),
+                }
+            }
+        # 个人重点事项工具：复用同步 _handle_* 方法
+        elif tool_name == "add_personal_note":
+            result = mcp_server._handle_add_personal_note(arguments)
+        elif tool_name == "delete_personal_note":
+            result = mcp_server._handle_delete_personal_note(arguments)
+        elif tool_name == "list_personal_notes":
+            result = mcp_server._handle_list_personal_notes(arguments)
+        elif tool_name == "list_due_reminders":
+            result = mcp_server._handle_list_due_reminders(arguments)
+        elif tool_name == "ack_reminder":
+            result = mcp_server._handle_ack_reminder(arguments)
+        else:
+            result = {"error": {"code": -32601, "message": f"Tool not found: {tool_name}"}}
+
+        return _cors_headers(web.Response(
+            text=json.dumps(result, ensure_ascii=False),
+            content_type="application/json",
+            charset="utf-8",
+        ))
+
+    # ── 注册路由（真实代理端点用 _safe 包装，异常返回 500 JSON 而非默认错误页）──
+    app.router.add_get(_path("/"), index_handler)
+    app.router.add_get(_path("/api/mail"), _safe(mail_handler))
+    app.router.add_get(_path("/api/todo"), _safe(todo_handler))
+    app.router.add_get(_path("/api/task-history"), _safe(task_history_handler))
+    app.router.add_post(_path("/api/refresh"), _safe(refresh_handler))
+    app.router.add_post(_path("/api/set-credentials"), _safe(set_credentials_handler))
+    app.router.add_get(_path("/api/personal-notes"), notes_list_handler)
+    app.router.add_post(_path("/api/personal-notes"), notes_add_handler)
+    app.router.add_delete(_path("/api/personal-notes"), notes_delete_handler)
+    app.router.add_get(_path("/api/reminders/pending"), reminders_pending_handler)
+    app.router.add_post(_path("/api/reminders/ack"), reminders_ack_handler)
+    app.router.add_post(_path("/mcp"), mcp_handler)
+    app.router.add_post(_path("/tools/{tool_name}"), _safe(tools_handler))
+
+    # 为所有已注册路径补 OPTIONS 预检（与原独立服务的 OPTIONS 处理一致）
+    for route in list(app.router.routes()):
+        canonical = route.resource.canonical
+        if route.method != "OPTIONS":
+            try:
+                app.router.add_route("OPTIONS", canonical, _options_handler)
+            except Exception:
+                pass
+
+    return app
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # 第五部分：主入口
 # ══════════════════════════════════════════════════════════════════════════
 
