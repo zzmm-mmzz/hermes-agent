@@ -5,7 +5,7 @@
 
 # 自建 SkillHub 后端地址
 skillhub:
-  base_url: "http://10.233.249.59:11899/api/v1"
+  base_url: "https://10.233.249.59:11899/api/v1"
 
   # 认证方式（两种选一种）:
   # 1. 本地开发模式（password 为空）:

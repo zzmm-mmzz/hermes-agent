@@ -44,8 +44,12 @@ import sys
 import zipfile
 from datetime import datetime
 from pathlib import Path
+import ssl
 from urllib.request import urlopen, Request
 from urllib.parse import quote
+
+# 内网自签证书场景：跳过 SSL 证书校验（后端为 https 自签时避免 CERTIFICATE_VERIFY_FAILED）
+SSL_UNVERIFIED = ssl._create_unverified_context()
 
 # ── 可选依赖：yaml（仅用于读取 hub_config.yaml） ──────────────────────────
 #  如果 pyyaml 未安装，退化为空配置（使用 localhost mock 模式）
@@ -209,7 +213,7 @@ def _fetch_json(url: str, timeout: int = 20) -> list | dict | None:
         解析后的 JSON 对象（list 或 dict），失败返回 None
     """
     try:
-        with urlopen(url, timeout=timeout) as resp:
+        with urlopen(url, timeout=timeout, context=SSL_UNVERIFIED) as resp:
             if resp.status != 200:
                 logger.warning("HTTP %s for %s", resp.status, url)
                 return None
@@ -251,7 +255,7 @@ def _build_auth_headers() -> dict:
             data=login_data,
             headers={"Content-Type": "application/json"},
         )
-        with urlopen(req, timeout=15) as resp:
+        with urlopen(req, timeout=15, context=SSL_UNVERIFIED) as resp:
             body = json.loads(resp.read().decode("utf-8"))
 
             # 策略 1: 提取 Set-Cookie（适用于 Session 认证）
@@ -309,7 +313,7 @@ def fetch_market_skills() -> list:
 
     try:
         req = Request(url, headers=headers)
-        with urlopen(req, timeout=30) as resp:
+        with urlopen(req, timeout=30, context=SSL_UNVERIFIED) as resp:
             if resp.status != 200:
                 logger.warning("后端返回 HTTP %s for /client/skills/list", resp.status)
                 return []
@@ -573,7 +577,7 @@ def _fetch_bytes(url: str, timeout: int = 60, headers: dict = None) -> bytes | N
     """
     try:
         req = Request(url, headers=headers or {})
-        with urlopen(req, timeout=timeout) as resp:
+        with urlopen(req, timeout=timeout, context=SSL_UNVERIFIED) as resp:
             if resp.status != 200:
                 logger.warning("_fetch_bytes 失败: HTTP %s %s", resp.status, url)
                 return None
@@ -1131,7 +1135,7 @@ def make_app():
 
         try:
             req = Request(url, headers=headers)
-            with urlopen(req, timeout=60) as resp:
+            with urlopen(req, timeout=60, context=SSL_UNVERIFIED) as resp:
                 if resp.status != 200:
                     return web.json_response(
                         {"code": str(resp.status), "message": f"下载失败: HTTP {resp.status}"},

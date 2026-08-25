@@ -12,8 +12,12 @@ import os
 import sys
 import logging
 from pathlib import Path
+import ssl
 from urllib.request import urlopen, Request
 from urllib.parse import quote
+
+# 内网自签证书场景：跳过 SSL 证书校验（后端为 https 自签时避免 CERTIFICATE_VERIFY_FAILED）
+SSL_UNVERIFIED = ssl._create_unverified_context()
 
 # 审计日志
 from gateway.audit_log import (
@@ -89,7 +93,7 @@ SKILLHUB_URL = _load_skillhub_config()["base_url"]
 def _fetch_json(url: str, timeout: int = 20):
     """GET JSON from SkillHub via urllib."""
     try:
-        with urlopen(url, timeout=timeout) as resp:
+        with urlopen(url, timeout=timeout, context=SSL_UNVERIFIED) as resp:
             if resp.status != 200:
                 return None
             return json.loads(resp.read().decode("utf-8"))
@@ -101,7 +105,7 @@ def _fetch_json(url: str, timeout: int = 20):
 def _fetch_bytes(url: str, timeout: int = 30):
     """GET raw bytes from SkillHub."""
     try:
-        with urlopen(url, timeout=timeout) as resp:
+        with urlopen(url, timeout=timeout, context=SSL_UNVERIFIED) as resp:
             if resp.status != 200:
                 return None
             return resp.read()
@@ -132,7 +136,7 @@ def _build_auth_headers() -> dict:
             data=login_data,
             headers={"Content-Type": "application/json"},
         )
-        with urlopen(req, timeout=15) as resp:
+        with urlopen(req, timeout=15, context=SSL_UNVERIFIED) as resp:
             body = json.loads(resp.read().decode("utf-8"))
             # 返回的 session 信息可能在不同版本不同，尝试提取 token/cookie
             logger.info("SkillHub login success for user '%s'", username)
@@ -189,7 +193,7 @@ def _hub_post_multipart(url: str, fields: dict, file_data: bytes, file_name: str
 
     try:
         req = Request(url, data=body, headers=headers)
-        with urlopen(req, timeout=60) as resp:
+        with urlopen(req, timeout=60, context=SSL_UNVERIFIED) as resp:
             result = json.loads(resp.read().decode("utf-8"))
             return {"ok": True, "status": resp.status, "response": result}
     except Exception as e:
