@@ -13,6 +13,7 @@
 """
 import json
 import logging
+import ssl
 from urllib import request as urllib_request
 from urllib.error import URLError
 
@@ -22,6 +23,9 @@ from indicators import engine, loader
 from indicators.config import CONFIG
 
 logger = logging.getLogger(__name__)
+
+# 内网后端若启用 https（自签名证书），跳过证书校验（内网信任域）
+SSL_UNVERIFIED = ssl._create_unverified_context()
 
 BACKEND_URL = CONFIG["backend_base_url"]
 BACKEND_PREFIX = CONFIG["backend_api_prefix"]
@@ -33,7 +37,7 @@ def _backend_get(path: str, timeout: int = 15):
     """GET 后端接口，返回 JSON（None=失败）。"""
     url = f"{BACKEND_URL}{BACKEND_PREFIX}{path}"
     try:
-        with urllib_request.urlopen(url, timeout=timeout) as resp:
+        with urllib_request.urlopen(url, timeout=timeout, context=SSL_UNVERIFIED) as resp:
             body = resp.read().decode("utf-8")
             return json.loads(body) if body else None
     except Exception as e:
@@ -49,7 +53,7 @@ def _backend_post(path: str, payload: dict, timeout: int = 15):
         url, data=data, headers={"Content-Type": "application/json"}, method="POST"
     )
     try:
-        with urllib_request.urlopen(req, timeout=timeout) as resp:
+        with urllib_request.urlopen(req, timeout=timeout, context=SSL_UNVERIFIED) as resp:
             body = resp.read().decode("utf-8")
             return json.loads(body) if body else None
     except URLError as e:

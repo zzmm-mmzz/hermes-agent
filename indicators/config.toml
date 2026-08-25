@@ -3,7 +3,7 @@
 platform_base_url = "http://22.56.118.69:8086"
 
 # 指标管理后端（t_indicator 存储，MVP-Base-Manage skill-hub 服务）
-backend_base_url = "http://localhost:18082"
+backend_base_url = "https://localhost:18082"
 backend_api_prefix = "/indicators"
 
 # 认证方式（指标平台）：login-name 头 + md5(login_name) 作为 Authorization

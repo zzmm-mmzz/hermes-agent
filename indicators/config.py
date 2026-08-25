@@ -13,7 +13,7 @@ CONFIG_PATH = _BASE_DIR / "config.toml"
 
 _DEFAULTS = {
     "platform_base_url": "http://22.56.118.69:8086",
-    "backend_base_url": "http://localhost:18082",
+    "backend_base_url": "https://localhost:18082",
     "backend_api_prefix": "/indicators",
     "auth_mode": "login_md5",
     "scripts_dir": "~/.hermes/custom_indicators",
