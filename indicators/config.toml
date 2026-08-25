@@ -1,9 +1,9 @@
 [indicators]
 # 指标数据源平台（真实指标服务）
-platform_base_url = "http://22.56.118.69:8086"
+platform_base_url = "http://25.212.224.159:18080"
 
 # 指标管理后端（t_indicator 存储，MVP-Base-Manage skill-hub 服务）
-backend_base_url = "https://localhost:18082"
+backend_base_url = "https://27.56.14.79:18081/api/skill-hub"
 backend_api_prefix = "/indicators"
 
 # 认证方式（指标平台）：login-name 头 + md5(login_name) 作为 Authorization
